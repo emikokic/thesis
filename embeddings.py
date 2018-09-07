@@ -1,4 +1,3 @@
-
 import numpy as np
 
 
@@ -19,7 +18,10 @@ def concat_vectors(sentence, D, W, w2v_model):
 
     # Fill the matrix corresponding to the sentence
     for idx, word in enumerate(sentence):
-        vector = w2v_model.get_vector(word)
+        try:
+            vector = model.get_vector(word)
+        except KeyError: # the word is not in the vocabulary
+            vector = np.zeros((D))          
         sen_matrix[:,idx] = vector
     
     # I: index of the target word
@@ -62,7 +64,10 @@ def mean_vectors(sentence, D, W, w2v_model):
     
     # Fill the matrix corresponding to the sentence
     for idx, word in enumerate(sentence):
-        vector = w2v_model.get_vector(word)
+        try:
+            vector = model.get_vector(word)
+        except KeyError: # the word is not in the vocabulary
+            vector = np.zeros((D))          
         sen_matrix[:,idx] = vector
         
     for I in range(L):
@@ -89,7 +94,10 @@ def fractional_decay(sentence, D, W, w2v_model):
     
     # Fill the matrix corresponding to the sentence
     for idx, word in enumerate(sentence):
-        vector = w2v_model.get_vector(word)
+        try:
+            vector = model.get_vector(word)
+        except KeyError: # the word is not in the vocabulary
+            vector = np.zeros((D))          
         sen_matrix[:,idx] = vector
         
     for I in range(L):
@@ -117,7 +125,10 @@ def exponential_decay(sentence, D, W, w2v_model):
     
     # Fill the matrix corresponding to the sentence
     for idx, word in enumerate(sentence):
-        vector = w2v_model.get_vector(word)
+        try:
+            vector = model.get_vector(word)
+        except KeyError: # the word is not in the vocabulary
+            vector = np.zeros((D))          
         sen_matrix[:,idx] = vector
     
     # Decay parameter alpha: We choose the parameter in such a way that the immediate words 
