@@ -13,8 +13,8 @@ def fill_w2vMatrix(sentence, sen_matrix, D, w2v_model):
             vector = w2v_model.get_vector(word)
         except KeyError: # the word is not in the vocabulary
             vector = np.zeros((D))
-            count += 1
-            no_vocab_list.append(word)
+#             count += 1
+#             no_vocab_list.append(word)
         sen_matrix[:,idx] = vector
     return sen_matrix, count, no_vocab_list
 
