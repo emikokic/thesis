@@ -68,8 +68,11 @@ def create_docs_df(dir_path, out_path):
 
     
 def get_tag(x):
-    tags = ['PER', 'LOC', 'ORG', 'MISC']
-    return tags[x]
+    return ['PER', 'LOC', 'ORG', 'MISC'][x]
+
+
+def tagToInt(tag):
+    return {'PER': 0, 'LOC': 1, 'ORG': 2, 'MISC': 3, 'O': 4}[tag]    
 
     
 def create_coarseNE_df(dir_path, out_path):
