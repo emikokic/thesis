@@ -1,6 +1,7 @@
 
 # coding: utf-8
 
+import input_data
 import math
 import numpy as np
 import tensorflow as tf
@@ -9,22 +10,22 @@ import csv
 from tqdm import tqdm
 
 
-layer_sizes = [300, 100, 1000, 5] # la última capa es de tamaño 5 por la cantidad de clases
+layer_sizes = [300, 100, 100, 5] # la última capa es de tamaño 5 por la cantidad de clases
                                   # PER - LOC - ORG - MISC - O
 
 
 L = len(layer_sizes) - 1  # number of layers
 
-num_examples = 3000000
+num_examples = 100000
 num_epochs = 100
-num_labeled = 1000000
+num_labeled = 10000
 
 starter_learning_rate = 0.02
 
 
 decay_after = 15  # epoch after which to begin learning rate decay
 
-batch_size = 160
+batch_size = 512
 num_iter = (num_examples/batch_size) * num_epochs  # number of loop iterations
 
 
@@ -217,9 +218,7 @@ with tf.control_dependencies([train_step]):
 
 
 print ("===  Loading Data ===")
-import input_data
-wikipedia = input_data.read_data_sets("wikipedia", n_labeled=num_labeled, one_hot=True)
-
+winer = input_data.read_data_sets('winer_path', n_labeled=num_labeled, one_hot=True)
 
 saver = tf.train.Saver()
 
@@ -245,10 +244,10 @@ else:
 
 
 print ("=== Training ===")
-print ("Initial Accuracy: ", sess.run(accuracy, feed_dict={inputs: wikipedia.test.words, outputs: wikipedia.test.labels, training: False}), "%")
+print ("Initial Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.test.words, outputs: winer.test.labels, training: False}), "%")
 
 for i in tqdm(range(i_iter, int(num_iter))):
-    words, labels = wikipedia.train.next_batch(batch_size)
+    words, labels = winer.train.next_batch(batch_size)
     sess.run(train_step, feed_dict={inputs: words, outputs: labels, training: True})
 
     if (i > 1) and ((i+1) % (num_iter/num_epochs) == 0):
@@ -262,6 +261,6 @@ for i in tqdm(range(i_iter, int(num_iter))):
             # sess.run(learning_rate.assign(starter_learning_rate * ratio))
         '''
         saver.save(sess, 'checkpoints/model.ckpt', global_step=epoch_n)
-        # print ("Epoch ", epoch_n, ", Accuracy: ", sess.run(accuracy, feed_dict={inputs: wikipedia.test.words, outputs:wikipedia.test.labels, training: False}), "%")
-saver.save(sess, './models/median_decay-300-100-1000-6')
-print ("Final Accuracy: ", sess.run(accuracy, feed_dict={inputs: wikipedia.test.words, outputs: wikipedia.test.labels, training: False}) , "%")
+        # print ("Epoch ", epoch_n, ", Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.test.words, outputs:winer.test.labels, training: False}), "%")
+saver.save(sess, './models/median_decay-300-100-100-5')
+print ("Final Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.test.words, outputs: winer.test.labels, training: False}) , "%")
