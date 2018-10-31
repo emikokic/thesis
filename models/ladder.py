@@ -10,22 +10,22 @@ import csv
 from tqdm import tqdm
 
 
-layer_sizes = [300, 100, 100, 5] # la última capa es de tamaño 5 por la cantidad de clases
+layer_sizes = [300, 250, 5] # la última capa es de tamaño 5 por la cantidad de clases
                                   # PER - LOC - ORG - MISC - O
 
 
 L = len(layer_sizes) - 1  # number of layers
 
-num_examples = 100000
-num_epochs = 100
-num_labeled = 10000
+num_examples = 10000
+num_epochs = 50
+num_labeled = 100
 
 starter_learning_rate = 0.02
 
 
 decay_after = 15  # epoch after which to begin learning rate decay
 
-batch_size = 512
+batch_size = num_labeled# probar batch size == num_labeled y ver si tiene sentido  # 512
 num_iter = (num_examples/batch_size) * num_epochs  # number of loop iterations
 
 
@@ -55,7 +55,7 @@ weights = {'W': [wi(s, "W") for s in shapes],        # Encoder weights
 noise_std = 0.3  # scaling factor for noise used in corrupted encoder
 
 # hyperparameters that denote the importance of each layer
-denoising_cost = [1000.0, 10.0, 0.10, 0.10]
+denoising_cost = [1000.0, 10.0, 0.10]
 
 
 join = lambda l, u: tf.concat([l, u], 0)
@@ -244,23 +244,48 @@ else:
 
 
 print ("=== Training ===")
-print ("Initial Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.test.words, outputs: winer.test.labels, training: False}), "%")
+print ("Initial Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.train.unlabeled_ds.words, outputs: winer.train.unlabeled_ds.labels, training: False}), "%")
 
-for i in tqdm(range(i_iter, int(num_iter))):
+train_loss_list = []
+train_loss_labeled = []
+train_loss_unlabeled = []
+cost + u_cost
+
+for i in tqdm(range(int(i_iter), int(num_iter))):
     words, labels = winer.train.next_batch(batch_size)
-    sess.run(train_step, feed_dict={inputs: words, outputs: labels, training: True})
+    _, train_loss, train_l_loss, train_u_loss = sess.run([train_step, loss, cost, u_cost],
+                                                         feed_dict={inputs: words, outputs: labels, training: True})
+    
+    train_loss_list.append(train_loss)
+    train_loss_labeled.append(train_l_loss)
+    train_loss_unlabeled.append(train_u_loss)
 
     if (i > 1) and ((i+1) % (num_iter/num_epochs) == 0):
         epoch_n = int(i/(num_examples/batch_size))
-        '''
+        
         if (epoch_n+1) >= decay_after:
             # decay learning rate
             # learning_rate = starter_learning_rate * ((num_epochs - epoch_n) / (num_epochs - decay_after))
             ratio = 1.0 * (num_epochs - (epoch_n+1))  # epoch_n + 1 because learning rate is set for next epoch
             ratio = max(0, ratio / (num_epochs - decay_after))
-            # sess.run(learning_rate.assign(starter_learning_rate * ratio))
-        '''
-        saver.save(sess, 'checkpoints/model.ckpt', global_step=epoch_n)
-        # print ("Epoch ", epoch_n, ", Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.test.words, outputs:winer.test.labels, training: False}), "%")
-saver.save(sess, './models/median_decay-300-100-100-5')
-print ("Final Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.test.words, outputs: winer.test.labels, training: False}) , "%")
+            sess.run(learning_rate.assign(starter_learning_rate * ratio))
+        
+        # saver.save(sess, 'checkpoints/model.ckpt', global_step=epoch_n)
+        print ("Epoch ", epoch_n, ", Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.train.unlabeled_ds.words, outputs:winer.train.unlabeled_ds.labels, training: False}), "%")
+# saver.save(sess, './models/median_decay-300-100-100-5')
+print ("Final Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.train.unlabeled_ds.words, outputs: winer.train.unlabeled_ds.labels, training: False}) , "%")
+
+print('Saving training loss...')
+with open('/users/ekokic/thesis/models/ladder_train_total_loss.txt', 'w') as filehandle:  
+    filehandle.writelines("%s\n" % loss for loss in train_loss_list)
+with open('/users/ekokic/thesis/models/ladder_train_l_loss.txt', 'w') as filehandle:  
+    filehandle.writelines("%s\n" % loss for loss in train_loss_labeled)
+with open('/users/ekokic/thesis/models/ladder_train_u_loss.txt', 'w') as filehandle:  
+    filehandle.writelines("%s\n" % loss for loss in train_loss_unlabeled)
+
+
+
+
+
+
+

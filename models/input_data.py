@@ -5,7 +5,6 @@ from __future__ import print_function
 # import urllib
 import keras
 import numpy as np
-from keras import utils
 
 # SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
 
@@ -85,7 +84,7 @@ def extract_labels(filename, one_hot=False, num_instances=0):
   if one_hot:
     def labelToInt(label): return {'O': 0, 'PER': 1, 'ORG': 2, 'LOC': 3, 'MISC': 4}[label]
     entities = [labelToInt(entity) for entity in entities]
-    keras.utils.to_categorical(entities, 5)  # 5 == NUM_CLASSES
+    entities = keras.utils.to_categorical(entities, 5)  # 5 == NUM_CLASSES
 
   return entities
 
@@ -164,27 +163,36 @@ class SemiDataSet(object):
 
     # Labeled DataSet
     self.num_examples = self.unlabeled_ds.num_examples
-    # indices = np.arange(self.num_examples)
-    # shuffled_indices = np.random.permutation(indices)
-    # words = words[shuffled_indices]
-    # labels = labels[shuffled_indices]
-    # y = np.array([np.arange(10)[l == 1][0] for l in labels]) # VER ESTO!!! TODO
-    # # NUM_CLASSES = 5  # ????
-    # # y = np.array([np.arange(NUM_CLASSES)[l == 1][0] for l in labels])  # VER ESTO!!!
+    indices = np.arange(self.num_examples)
+    shuffled_indices = np.random.permutation(indices)
+    words = words[shuffled_indices]
+    labels = labels[shuffled_indices]
+    n_classes = 5
+    y = np.array([np.arange(n_classes)[l == 1][0] for l in labels])
     # idx = indices[y == 0][:5]
     # n_classes = y.max() + 1
-    # n_from_each_class = n_labeled / n_classes
-    # i_labeled = []
-    # for c in range(n_classes):
-    #   i = indices[y == c][:n_from_each_class]
-    #   i_labeled += list(i)
-    # l_words = words[i_labeled]
-    # l_labels = labels[i_labeled]
+    n_from_each_class = n_labeled / n_classes
+    print('n_from_each_class', n_from_each_class)
+    i_labeled = []
+    for c in range(n_classes):
+      i = indices[y == c][:int(n_from_each_class)]
+      i_labeled += list(i)
+
+    l_words = words[i_labeled]
+    l_labels = labels[i_labeled]
+
+    # print('l_words[0]', l_words[0])
+    # print('l_labels[0]', l_labels[0])
+    # print('l_labels[:10]', l_labels)
+
+    # unique_elements, counts_elements = np.unique(l_labels, return_counts=True)
+    # print("Frequency of unique values of the said array:")
+    # print(np.asarray((unique_elements, counts_elements)))
 
     # DUDA: estoy utilizando mismos datos para sup como para no sup?
     # con el codigo anterior tambien pasa esto solo que con el agregado de que la eleccion
     # de los datos etiquetados es random?
-    self.labeled_ds = DataSet(words[:n_labeled], labels[:n_labeled])  # DataSet(l_words, l_labels)
+    self.labeled_ds = DataSet(l_words, l_labels)  # DataSet(words[:n_labeled], labels[:n_labeled])
 
   def next_batch(self, batch_size):
     unlabeled_words, _ = self.unlabeled_ds.next_batch(batch_size)
@@ -226,11 +234,14 @@ def read_data_sets(train_dir, n_labeled=100, fake_data=False, one_hot=False):
   # local_file = maybe_download(TRAIN_LABELS, train_dir)
   y_train = extract_labels('/users/ekokic/thesis/corpus_WiNER/entity_vectors/ev_train_exp_decay_W_5.npz',
                            one_hot=one_hot, num_instances=100000)
-  y_dev = extract_labels('/users/ekokic/thesis/corpus_WiNER/entity_vectors/ev_train_exp_decay_W_5.npz',
+  y_dev = extract_labels('/users/ekokic/thesis/corpus_WiNER/entity_vectors/ev_dev_exp_decay_W_5.npz',
                          one_hot=one_hot, num_instances=20000)
-  y_test = extract_labels('/users/ekokic/thesis/corpus_WiNER/entity_vectors/ev_train_exp_decay_W_5.npz',
+  y_test = extract_labels('/users/ekokic/thesis/corpus_WiNER/entity_vectors/ev_test_exp_decay_W_5.npz',
                           one_hot=one_hot, num_instances=20000)
 
+  print('X_train len', len(X_train))
+  print('X_dev len', len(X_dev))
+  print('X_test len', len(X_test))
   # local_file = maybe_download(TEST_IMAGES, train_dir)
   # test_images = extract_images(local_file)
 

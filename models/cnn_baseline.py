@@ -14,20 +14,10 @@ from keras import regularizers, optimizers
 from keras.utils import to_categorical
 from keras.losses import categorical_crossentropy
 from keras.callbacks import History
-# from sklearn.model_selection import GridSearchCV
-# from sklearn.metrics import accuracy_score, f1_score
 from gensim.models import KeyedVectors
-from keras.backend.tensorflow_backend import set_session
-from tensorflow.python.client import device_lib
 
 
 NUM_CLASSES = 5  # PER - LOC - ORG - MISC - O
-
-
-def limit_memory(val):
-    config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = val
-    set_session(tf.Session(config=config))
 
 
 def load_dataset():
@@ -129,7 +119,6 @@ def build_model(h_params, input_shape):
 
 
 if __name__ == '__main__':
-    limit_memory(0.1)
 
     parser = argparse.ArgumentParser(description='CNN baseline experiment')
     parser.add_argument('--num_filters',
