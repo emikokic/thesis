@@ -7,25 +7,67 @@ import numpy as np
 import tensorflow as tf
 import os
 import csv
+import argparse
 from tqdm import tqdm
 
 
-layer_sizes = [300, 250, 5] # la última capa es de tamaño 5 por la cantidad de clases
-                                  # PER - LOC - ORG - MISC - O
+parser = argparse.ArgumentParser(description='Ladder baseline experiment')
+parser.add_argument('--hidden_layer_sizes',
+                    default=[250],
+                    type=list,
+                    help='List of hidden layer sizes.')
+parser.add_argument('--denoising_cost',
+                    default=[1000.0, 10.0, 0.10],
+                    type=list,
+                    help='Denote the importance of each layer')
+# parser.add_argument('--drop',
+#                     default=0,
+#                     type=float,
+#                     help='Randomly fraction rate of input units to 0'
+#                          'at each update during training time')
+# parser.add_argument('--l2',
+#                     default=0.1,
+#                     type=float,
+#                     help='L2 kernel regularizer')
+parser.add_argument('--num_labeled',
+                    default=100,
+                    type=int,
+                    help='Number of labeled instances.')
+parser.add_argument('--batch_size',
+                    default=100,
+                    type=int,
+                    help='Batch size.')
+parser.add_argument('--epochs',
+                    default=50,
+                    type=int,
+                    help='Number of training epochs.')
+parser.add_argument('--learning_rate',
+                    default=0.02,
+                    type=float,
+                    help='Starter learning rate.')
+parser.add_argument('--decay_after',
+                    default=15,
+                    type=int,
+                    help='Epoch after which to begin learning rate decay.')
 
+args = parser.parse_args()
+
+# layer_sizes = [300, 250, 5] # la última capa es de tamaño 5 por la cantidad de clases
+                                  # PER - LOC - ORG - MISC - O
+layer_sizes = [300] + args.hidden_layer_sizes + [5]
 
 L = len(layer_sizes) - 1  # number of layers
 
-num_examples = 10000
-num_epochs = 50
-num_labeled = 100
+num_examples = 100000
+num_epochs = args.epochs # 50
+num_labeled = args.num_labeled # 100
 
-starter_learning_rate = 0.02
+starter_learning_rate = args.learning_rate# 0.02
 
 
-decay_after = 15  # epoch after which to begin learning rate decay
+decay_after = args.decay_after # 15  # epoch after which to begin learning rate decay
 
-batch_size = num_labeled# probar batch size == num_labeled y ver si tiene sentido  # 512
+batch_size = args.batch_size# probar batch size == num_labeled y ver si tiene sentido  # 512
 num_iter = (num_examples/batch_size) * num_epochs  # number of loop iterations
 
 
@@ -55,7 +97,7 @@ weights = {'W': [wi(s, "W") for s in shapes],        # Encoder weights
 noise_std = 0.3  # scaling factor for noise used in corrupted encoder
 
 # hyperparameters that denote the importance of each layer
-denoising_cost = [1000.0, 10.0, 0.10]
+denoising_cost = args.denoising_cost# [1000.0, 10.0, 0.10]
 
 
 join = lambda l, u: tf.concat([l, u], 0)
@@ -244,19 +286,18 @@ else:
 
 
 print ("=== Training ===")
-print ("Initial Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.train.unlabeled_ds.words, outputs: winer.train.unlabeled_ds.labels, training: False}), "%")
+print ("Initial Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.validation.words, 
+                                      outputs: winer.validation.labels, training: False}), "%")
 
-train_loss_list = []
 train_loss_labeled = []
 train_loss_unlabeled = []
-cost + u_cost
+train_acc_list = []
+val_acc_list = []
 
 for i in tqdm(range(int(i_iter), int(num_iter))):
     words, labels = winer.train.next_batch(batch_size)
-    _, train_loss, train_l_loss, train_u_loss = sess.run([train_step, loss, cost, u_cost],
-                                                         feed_dict={inputs: words, outputs: labels, training: True})
-    
-    train_loss_list.append(train_loss)
+    _, train_l_loss, train_u_loss, train_acc = sess.run([train_step, cost, u_cost, accuracy],
+                                                        feed_dict={inputs: words, outputs: labels, training: True})
     train_loss_labeled.append(train_l_loss)
     train_loss_unlabeled.append(train_u_loss)
 
@@ -271,21 +312,50 @@ for i in tqdm(range(int(i_iter), int(num_iter))):
             sess.run(learning_rate.assign(starter_learning_rate * ratio))
         
         # saver.save(sess, 'checkpoints/model.ckpt', global_step=epoch_n)
-        print ("Epoch ", epoch_n, ", Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.train.unlabeled_ds.words, outputs:winer.train.unlabeled_ds.labels, training: False}), "%")
+        val_acc = sess.run(accuracy, feed_dict={inputs: winer.validation.words, outputs:winer.validation.labels, training: False})
+        print ("Epoch ", epoch_n, ", Validation Accuracy: ", val_acc, "%")
+        
+        train_acc_list.append(train_acc)
+        val_acc_list.append(val_acc)
 # saver.save(sess, './models/median_decay-300-100-100-5')
-print ("Final Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.train.unlabeled_ds.words, outputs: winer.train.unlabeled_ds.labels, training: False}) , "%")
+val_acc = sess.run(accuracy, feed_dict={inputs: winer.validation.words, outputs: winer.validation.labels, training: False})
+print ("Final Accuracy: ",  val_acc, "%")
+
+
+
+args = list(vars(args).items())
+experiment_name = 'ladder'
+for key, value in args:
+    experiment_name += ('_' + str(key) + '_' + str(value))
+
 
 print('Saving training loss...')
-with open('/users/ekokic/thesis/models/ladder_train_total_loss.txt', 'w') as filehandle:  
-    filehandle.writelines("%s\n" % loss for loss in train_loss_list)
-with open('/users/ekokic/thesis/models/ladder_train_l_loss.txt', 'w') as filehandle:  
-    filehandle.writelines("%s\n" % loss for loss in train_loss_labeled)
-with open('/users/ekokic/thesis/models/ladder_train_u_loss.txt', 'w') as filehandle:  
-    filehandle.writelines("%s\n" % loss for loss in train_loss_unlabeled)
+# with open('~/thesis/models/ladder_train_l_loss.txt', 'w') as filehandle:  
+#     filehandle.writelines("%s\n" % loss for loss in train_loss_labeled)
+# with open('~/thesis/models/ladder_train_u_loss.txt', 'w') as filehandle:  
+#     filehandle.writelines("%s\n" % loss for loss in train_loss_unlabeled)
+
+if not path.exists('~/thesis/models/ladder_training_loss.csv'):
+    with open('./thesis/models/ladder_training_loss.csv', 'w', newline='') as csvfile:
+        metric_writer = csv.writer(csvfile, delimiter=',')
+        metric_writer.writerow(['model_name', 'train_loss_labeled', 'train_loss_unlabeled'])
+
+with open('~/thesis/models/ladder_training_loss.csv', 'a', newline='') as csvfile:
+    metric_writer = csv.writer(csvfile, delimiter=',')
+    metric_writer.writerow([experiment_name, train_loss_labeled, train_loss_unlabeled])
 
 
+print('Saving model metrics...')
+train_acc = train_acc_list[-1]
+val_acc = val_acc_list[-1]
 
+if not path.exists('~/thesis/models/ladder_metrics.csv'):
+    with open('./thesis/models/ladder_metrics.csv', 'w', newline='') as csvfile:
+        metric_writer = csv.writer(csvfile, delimiter=',')
+        metric_writer.writerow(['model_name', 'train_acc', 'val_acc'])
 
-
+with open('~/thesis/models/ladder_metrics.csv', 'a', newline='') as csvfile:
+    metric_writer = csv.writer(csvfile, delimiter=',')
+    metric_writer.writerow([experiment_name, train_acc, val_acc])
 
 

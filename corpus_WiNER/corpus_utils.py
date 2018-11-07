@@ -39,7 +39,7 @@ def get_word(idx, word_mapping):
 def create_docs_df(dir_path, out_path):
     '''Reads the WiNER's documents and creates the associated dataframes.'''
 
-    word_mapping = pd.read_csv('./corpus_WiNER/document.vocab', sep=' ', header=None, 
+    word_mapping = pd.read_csv('../corpus_WiNER/document.vocab', sep=' ', header=None, 
                            names=['word', 'frequency'], keep_default_na=False)
 
     docs = pd.DataFrame(columns=['sentence','art_ID'])
@@ -173,11 +173,11 @@ def drop_non_entities(df, frac):
 
 
 def read_filenames():
-    doc_filenames = os.listdir('./corpus_WiNER/docs_df/')
+    doc_filenames = os.listdir('../corpus_WiNER/docs_df/')
     doc_filenames = [int(f_name) for f_name in doc_filenames]
     doc_filenames.sort()
     doc_filenames = [str(f_name) for f_name in doc_filenames]
-    coarseNE_filenames = os.listdir('./corpus_WiNER/coarseNE_df/')
+    coarseNE_filenames = os.listdir('../corpus_WiNER/coarseNE_df/')
     coarseNE_filenames = [int(f_name) for f_name in coarseNE_filenames]
     coarseNE_filenames.sort()
     coarseNE_filenames = [str(f_name) for f_name in coarseNE_filenames]
@@ -213,9 +213,9 @@ def genWordVectors_Entity(doc_df, coarseNE_df, strategy, W, w2v_model, splitType
         entityVector += list(wordVector_Entity_df['entityType'])
 
     starting = time.time()
-    np.savez_compressed('./corpus_WiNER/entity_vectors/ev_' + splitType + '_' + strategy 
+    np.savez_compressed('../corpus_WiNER/entity_vectors/ev_' + splitType + '_' + strategy 
                         + '_W_' + str(W), entityVector)
-    np.savez_compressed('./corpus_WiNER/word_vectors/wv_'+ splitType + '_' + strategy
+    np.savez_compressed('../corpus_WiNER/word_vectors/wv_'+ splitType + '_' + strategy
                         + '_W_' + str(W), wordVectors)
     finishing = time.time()
     print('tiempo de guardado:', finishing - starting)
@@ -266,7 +266,7 @@ def generate_cnn_instances(art_IDs_sample, articles_df, entities_df, W, splitTyp
 
     instances = pd.DataFrame(new_input, columns=['words', 'entityType'])
     instances = drop_non_entities(instances, 0.80)
-    instances.to_csv('./corpus_WiNER/cnn_instances/words_entity_W_'+str(W)+'_cnn_'+splitType+'.csv',
+    instances.to_csv('../corpus_WiNER/cnn_instances/words_entity_W_'+str(W)+'_cnn_'+splitType+'.csv',
                      index=False)
 
 
@@ -274,8 +274,8 @@ def load_docs(doc_filenames, coarseNE_filenames):
     docs = []
     coarseNEs = []
     for doc, ne in zip(doc_filenames, coarseNE_filenames):
-        docs.append(pd.read_pickle('./corpus_WiNER/docs_df/'+ doc))
-        coarseNEs.append(pd.read_pickle('./corpus_WiNER/coarseNE_df/'+ ne))
+        docs.append(pd.read_pickle('../corpus_WiNER/docs_df/'+ doc))
+        coarseNEs.append(pd.read_pickle('../corpus_WiNER/coarseNE_df/'+ ne))
     docs_df = pd.concat(docs, ignore_index=True)
     coarseNE_df = pd.concat(coarseNEs, ignore_index=True)
     
@@ -284,8 +284,8 @@ def load_docs(doc_filenames, coarseNE_filenames):
 
 def main():
     start = time.time()
-#     create_docs_df('./corpus_WiNER/Documents/', './corpus_WiNER/docs_df/')
-#     create_coarseNE_df('./corpus_WiNER/CoarseNE/', './corpus_WiNER/coarseNE_df/')
+#     create_docs_df('./Documents/', './docs_df/')
+#     create_coarseNE_df('./CoarseNE/', './coarseNE_df/')
     end = time.time()
     print('Demora: {}'.format(end - start))
 

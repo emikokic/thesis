@@ -188,7 +188,7 @@ if __name__ == '__main__':
     dev_acc = np.array(history.history['val_acc'])[-1]
 
     # if not path.exists('../thesis/models/cnn_metrics.csv'):
-    #     with open('./thesis/models/metrics.csv', 'w', newline='') as csvfile:
+    #     with open('./thesis/models/cnn_metrics.csv', 'w', newline='') as csvfile:
     #         metric_writer = csv.writer(csvfile, delimiter=',')
     #         metric_writer.writerow(['model_name', 'train_loss', 'dev_loss', 'train_acc', 'dev_acc'])
 
