@@ -43,7 +43,7 @@ def extract_words(filename, num_instances):
 
   print('Extracting', filename)
   word_vectors = np.load(filename)
-  word_vectors = word_vectors.items()[0][1][:num_instances]
+  word_vectors = word_vectors['arr_0'][:num_instances]
 
   return word_vectors
 
@@ -79,7 +79,7 @@ def extract_labels(filename, one_hot=False, num_instances=0):
 
   print('Extracting', filename)
   entity_vector = np.load(filename)
-  entities = entity_vector.items()[0][1][:num_instances]
+  entities = entity_vector['arr_0'][:num_instances]
 
   if one_hot:
     def labelToInt(label): return {'O': 0, 'PER': 1, 'ORG': 2, 'LOC': 3, 'MISC': 4}[label]
@@ -181,6 +181,7 @@ class SemiDataSet(object):
     l_words = words[i_labeled]
     l_labels = labels[i_labeled]
 
+    print('len l_words:', len(l_words))
     # print('l_words[0]', l_words[0])
     # print('l_labels[0]', l_labels[0])
     # print('l_labels[:10]', l_labels)
@@ -201,6 +202,7 @@ class SemiDataSet(object):
     else:
       labeled_words, labels = self.labeled_ds.next_batch(batch_size)
     words = np.vstack([labeled_words, unlabeled_words])
+
     return words, labels
 
 
@@ -224,19 +226,19 @@ def read_data_sets(train_dir, n_labeled=100, fake_data=False, one_hot=False):
   # local_file = maybe_download(TRAIN_IMAGES, train_dir)
   # train_images = extract_images(local_file)
 
-  X_train = extract_words('/users/ekokic/thesis/corpus_WiNER/word_vectors/wv_train_exp_decay_W_5.npz',
+  X_train = extract_words('/home/ekokic/thesis/corpus_WiNER/word_vectors/wv_train_exp_decay_W_5.npz',
                           num_instances=100000)
-  X_dev = extract_words('/users/ekokic/thesis/corpus_WiNER/word_vectors/wv_dev_exp_decay_W_5.npz',
+  X_dev = extract_words('/home/ekokic/thesis/corpus_WiNER/word_vectors/wv_dev_exp_decay_W_5.npz',
                         num_instances=20000)
-  X_test = extract_words('/users/ekokic/thesis/corpus_WiNER/word_vectors/wv_test_exp_decay_W_5.npz',
+  X_test = extract_words('/home/ekokic/thesis/corpus_WiNER/word_vectors/wv_test_exp_decay_W_5.npz',
                          num_instances=20000)
 
   # local_file = maybe_download(TRAIN_LABELS, train_dir)
-  y_train = extract_labels('/users/ekokic/thesis/corpus_WiNER/entity_vectors/ev_train_exp_decay_W_5.npz',
+  y_train = extract_labels('/home/ekokic/thesis/corpus_WiNER/entity_vectors/ev_train_exp_decay_W_5.npz',
                            one_hot=one_hot, num_instances=100000)
-  y_dev = extract_labels('/users/ekokic/thesis/corpus_WiNER/entity_vectors/ev_dev_exp_decay_W_5.npz',
+  y_dev = extract_labels('/home/ekokic/thesis/corpus_WiNER/entity_vectors/ev_dev_exp_decay_W_5.npz',
                          one_hot=one_hot, num_instances=20000)
-  y_test = extract_labels('/users/ekokic/thesis/corpus_WiNER/entity_vectors/ev_test_exp_decay_W_5.npz',
+  y_test = extract_labels('/home/ekokic/thesis/corpus_WiNER/entity_vectors/ev_test_exp_decay_W_5.npz',
                           one_hot=one_hot, num_instances=20000)
 
   print('X_train len', len(X_train))

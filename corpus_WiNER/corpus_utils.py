@@ -48,7 +48,7 @@ def create_docs_df(dir_path, out_path):
 
     for file in files(dir_path):
         filepath = dir_path + file
-        df_path = out_path + 'doc_' + file
+        df_path = out_path + file
 
         doc = pd.read_csv(filepath, sep='ID', engine='python', header=None,
                           names=['sentence', 'art_ID'])
@@ -82,7 +82,7 @@ def create_coarseNE_df(dir_path, out_path):
     count = 0
     for file in files(dir_path):
         filepath = dir_path + file
-        df_path = out_path + 'coarseNE_' + file
+        df_path = out_path + file
 
         coarseNE = pd.read_csv(filepath, sep='ID', engine='python', header=None,
                           names=['named-entity', 'art_ID'])
@@ -284,8 +284,8 @@ def load_docs(doc_filenames, coarseNE_filenames):
 
 def main():
     start = time.time()
-#     create_docs_df('./Documents/', './docs_df/')
-#     create_coarseNE_df('./CoarseNE/', './coarseNE_df/')
+    create_docs_df('./Documents/', './docs_df/')
+    create_coarseNE_df('./CoarseNE/', './coarseNE_df/')
     end = time.time()
     print('Demora: {}'.format(end - start))
 

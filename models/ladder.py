@@ -14,21 +14,16 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser(description='Ladder baseline experiment')
 parser.add_argument('--hidden_layer_sizes',
                     default=[250],
-                    type=list,
+                    nargs='*',
                     help='List of hidden layer sizes.')
 parser.add_argument('--denoising_cost',
                     default=[1000.0, 10.0, 0.10],
-                    type=list,
+                    nargs='*',
                     help='Denote the importance of each layer')
-# parser.add_argument('--drop',
-#                     default=0,
-#                     type=float,
-#                     help='Randomly fraction rate of input units to 0'
-#                          'at each update during training time')
-# parser.add_argument('--l2',
-#                     default=0.1,
-#                     type=float,
-#                     help='L2 kernel regularizer')
+parser.add_argument('--noise_std',
+                    default=0.3,
+                    type=float,
+                    help='Scaling factor for noise used in corrupted encoder')
 parser.add_argument('--num_labeled',
                     default=100,
                     type=int,
@@ -54,7 +49,14 @@ args = parser.parse_args()
 
 # layer_sizes = [300, 250, 5] # la última capa es de tamaño 5 por la cantidad de clases
                                   # PER - LOC - ORG - MISC - O
+args.hidden_layer_sizes = [int(size) for size in args.hidden_layer_sizes]
+args.denoising_cost = [float(d_cost) for d_cost in args.denoising_cost]
+
 layer_sizes = [300] + args.hidden_layer_sizes + [5]
+
+print('LAYER SIZES:', layer_sizes)
+print('HIDDEN SIZES:', args.hidden_layer_sizes)
+print('DENOISING COST:', args.denoising_cost)
 
 L = len(layer_sizes) - 1  # number of layers
 
@@ -83,7 +85,7 @@ def wi(shape, name):
     return tf.Variable(tf.random_normal(shape, name=name)) / math.sqrt(shape[0])
 
 
-shapes = list(zip(layer_sizes[:-1], layer_sizes[1:]))  # shapes of linear layers DUDA: linear o hidden??
+shapes = list(zip(layer_sizes[:-1], layer_sizes[1:]))  # shapes of linear layers
 
 
 weights = {'W': [wi(s, "W") for s in shapes],        # Encoder weights
@@ -94,7 +96,7 @@ weights = {'W': [wi(s, "W") for s in shapes],        # Encoder weights
            'gamma': [bi(1.0, layer_sizes[l+1], "gamma") for l in range(L)]}
 
 
-noise_std = 0.3  # scaling factor for noise used in corrupted encoder
+noise_std = args.noise_std# 0.3  # scaling factor for noise used in corrupted encoder
 
 # hyperparameters that denote the importance of each layer
 denoising_cost = args.denoising_cost# [1000.0, 10.0, 0.10]
@@ -245,8 +247,12 @@ y_N = labeled(y_c)
 cost = -tf.reduce_mean(tf.reduce_sum(outputs*tf.log(y_N), 1))  # supervised cost
 loss = cost + u_cost  # total cost
 
-pred_cost = -tf.reduce_mean(tf.reduce_sum(outputs*tf.log(y), 1))  # cost used for prediction
+# TODO: chequear: la idea es obtener la accuracy en train
+# train_correct_prediction = tf.equal(tf.argmax(y_N, -1), tf.argmax(outputs, -1))
+# train_accuracy = tf.reduce_mean(tf.cast(train_correct_prediction, "float")) * tf.constant(100.0)
+############################
 
+pred_cost = -tf.reduce_mean(tf.reduce_sum(outputs*tf.log(y), 1))  # cost used for prediction
 correct_prediction = tf.equal(tf.argmax(y, -1), tf.argmax(outputs, -1))  # no of correct predictions
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float")) * tf.constant(100.0)
 
@@ -291,13 +297,14 @@ print ("Initial Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.validat
 
 train_loss_labeled = []
 train_loss_unlabeled = []
-train_acc_list = []
+# train_acc_list = []
 val_acc_list = []
 
 for i in tqdm(range(int(i_iter), int(num_iter))):
     words, labels = winer.train.next_batch(batch_size)
-    _, train_l_loss, train_u_loss, train_acc = sess.run([train_step, cost, u_cost, accuracy],
-                                                        feed_dict={inputs: words, outputs: labels, training: True})
+
+    _, train_l_loss, train_u_loss = sess.run([train_step, cost, u_cost],
+                                             feed_dict={inputs: words, outputs: labels, training: True})
     train_loss_labeled.append(train_l_loss)
     train_loss_unlabeled.append(train_u_loss)
 
@@ -313,14 +320,16 @@ for i in tqdm(range(int(i_iter), int(num_iter))):
         
         # saver.save(sess, 'checkpoints/model.ckpt', global_step=epoch_n)
         val_acc = sess.run(accuracy, feed_dict={inputs: winer.validation.words, outputs:winer.validation.labels, training: False})
+        
+        print ("Epoch ", epoch_n, ", Training Labeled loss: {0:.6f}".format(train_l_loss))
+        print ("Epoch ", epoch_n, ", Training Unlabeled loss: {0:.6f}".format(train_u_loss))
         print ("Epoch ", epoch_n, ", Validation Accuracy: ", val_acc, "%")
         
-        train_acc_list.append(train_acc)
+        # train_acc_list.append(train_acc)
         val_acc_list.append(val_acc)
 # saver.save(sess, './models/median_decay-300-100-100-5')
 val_acc = sess.run(accuracy, feed_dict={inputs: winer.validation.words, outputs: winer.validation.labels, training: False})
 print ("Final Accuracy: ",  val_acc, "%")
-
 
 
 args = list(vars(args).items())
@@ -329,33 +338,33 @@ for key, value in args:
     experiment_name += ('_' + str(key) + '_' + str(value))
 
 
-print('Saving training loss...')
+print('Saving training loss and validation accuracy...')
 # with open('~/thesis/models/ladder_train_l_loss.txt', 'w') as filehandle:  
 #     filehandle.writelines("%s\n" % loss for loss in train_loss_labeled)
 # with open('~/thesis/models/ladder_train_u_loss.txt', 'w') as filehandle:  
 #     filehandle.writelines("%s\n" % loss for loss in train_loss_unlabeled)
 
-if not path.exists('~/thesis/models/ladder_training_loss.csv'):
-    with open('./thesis/models/ladder_training_loss.csv', 'w', newline='') as csvfile:
+if not os.path.exists('/home/ekokic/thesis/models/ladder_metrics.csv'):
+    with open('/home/ekokic/thesis/models/ladder_metrics.csv', 'w', newline='') as csvfile:
         metric_writer = csv.writer(csvfile, delimiter=',')
-        metric_writer.writerow(['model_name', 'train_loss_labeled', 'train_loss_unlabeled'])
+        metric_writer.writerow(['model_name', 'train_loss_labeled', 'train_loss_unlabeled', 'val_acc'])
 
-with open('~/thesis/models/ladder_training_loss.csv', 'a', newline='') as csvfile:
+with open('/home/ekokic/thesis/models/ladder_metrics.csv', 'a', newline='') as csvfile:
     metric_writer = csv.writer(csvfile, delimiter=',')
-    metric_writer.writerow([experiment_name, train_loss_labeled, train_loss_unlabeled])
+    metric_writer.writerow([experiment_name, train_loss_labeled, train_loss_unlabeled, val_acc])
 
 
-print('Saving model metrics...')
-train_acc = train_acc_list[-1]
-val_acc = val_acc_list[-1]
+# print('Saving model metrics...')
+# train_acc = train_acc_list[-1]
+# val_acc = val_acc_list[-1]
 
-if not path.exists('~/thesis/models/ladder_metrics.csv'):
-    with open('./thesis/models/ladder_metrics.csv', 'w', newline='') as csvfile:
-        metric_writer = csv.writer(csvfile, delimiter=',')
-        metric_writer.writerow(['model_name', 'train_acc', 'val_acc'])
+# if not os.path.exists('~/thesis/models/ladder_metrics.csv'):
+#     with open('~/thesis/models/ladder_metrics.csv', 'w', newline='') as csvfile:
+#         metric_writer = csv.writer(csvfile, delimiter=',')
+#         metric_writer.writerow(['model_name', 'train_acc', 'val_acc'])
 
-with open('~/thesis/models/ladder_metrics.csv', 'a', newline='') as csvfile:
-    metric_writer = csv.writer(csvfile, delimiter=',')
-    metric_writer.writerow([experiment_name, train_acc, val_acc])
+# with open('~/thesis/models/ladder_metrics.csv', 'a', newline='') as csvfile:
+#     metric_writer = csv.writer(csvfile, delimiter=',')
+#     metric_writer.writerow([experiment_name, train_acc, val_acc])
 
 
