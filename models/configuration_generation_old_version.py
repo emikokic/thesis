@@ -48,6 +48,9 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size",
                         default=100,
                         type=int)
+    parser.add_argument("--num-labeled",
+                        default=100,
+                        type=int)
 
     args = parser.parse_args()
 
@@ -61,6 +64,7 @@ if __name__ == "__main__":
     starter_learning_rate = args.starter_learning_rate
     decay_after = args.decay_after
     epochs = args.epochs
+    num_labeled = args.num_labeled
     batch_size = args.batch_size
     num_classes = args.num_classes
     assert num_classes is not None
@@ -82,10 +86,17 @@ if __name__ == "__main__":
         }
 
         if spec[0] == "conv":
-            layer_spec["kernel_size"] = int(spec[1])
-            layer_spec["input_filters"] = current_filter_size
-            layer_spec["output_filters"] = int(spec[2])
-            current_filter_size = layer_spec["output_filters"]
+            layer_spec["kernel_size"] = int(spec[1])          # filter_height 
+            layer_spec["input_filters"] = current_filter_size # in_channels
+            layer_spec["output_filters"] = int(spec[2])       # out_channels (ver conv2d en utils.py)
+            current_filter_size = layer_spec["output_filters"] # DUDA: El parametro "output_filters" 
+                                                                # es la cantidad de convoluciones aplicadas
+                                                                # con ese filtro?
+            # DUDA: aqui no deberia actualizarse current_sequence_size?
+            # current_sequence_size = 
+            # o no es necesario pues en conv2d de utils.py se lo llama con padding='SAME'
+            # entonces en realidad la dimension current_sequence_size se mantiene
+
         elif spec[0] == "max_pool":
             layer_spec["pool_size"] = int(spec[1])
             assert current_sequence_size % layer_spec["pool_size"] == 0
@@ -137,11 +148,16 @@ if __name__ == "__main__":
         starter_learning_rate=starter_learning_rate,
         decay_after=decay_after,
         num_classes=num_classes,
-        num_labeled=batch_size,
+        num_labeled=num_labeled,
         batch_size=batch_size,
         num_epochs=epochs
     )
+
     configuration["experiment_id"] = md5(configuration["hyperparameters"].encode("utf-8")).hexdigest()
 
-    with open("%s/%s.json" % (args.save_path, configuration["experiment_id"]), "w") as fh:
-        json.dump(configuration, fh)
+    if os.path.isdir(args.save_path):
+        with open("%s/%s.json" % (args.save_path, configuration["experiment_id"]), "w") as fh:
+            json.dump(configuration, fh)
+    else:
+        with open(args.save_path, "w") as fh:
+            json.dump(configuration, fh)        

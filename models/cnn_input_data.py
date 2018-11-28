@@ -182,7 +182,7 @@ def read_data_sets(data_path, n_classes, n_labeled=100, fake_data=False, maxlen=
     print('Loading word2vec model...')
     w2v_model = KeyedVectors.load('/home/ekokic/thesis/models/google/word2vecGoogle.model')
 
-    print('Preprocessing input data...')        # TODO: pasar n_classes como argumento.
+    print('Preprocessing input data...')
     X_train, X_val, X_test, y_train, y_val, y_test = preprocess_data(train_data, val_data,
                                                                      test_data, w2v_model, n_classes)
 

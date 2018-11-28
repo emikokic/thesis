@@ -13,6 +13,7 @@ import sys
 import tensorflow as tf
 
 from tqdm import tqdm, trange
+from utils import flat, max_pool, run_layer, run_transpose_layer
 from gensim.models import KeyedVectors
 
 
@@ -20,12 +21,8 @@ def main(data_path, results_file, config):
     ####################################################################################
     # Previous operations
     ####################################################################################
-    ###    layers = config['layers']
-    ###    L = len(layers)
-
-    conv_kernels = config['conv_kernels']
-    conv_filters = config['conv_filters']
-    num_classes = config["num_classes"]
+    layers = config['layers']
+    L = len(layers)
 
     tf.reset_default_graph()  # Clear the tensorflow graph (free reserved memory)
 
@@ -40,11 +37,14 @@ def main(data_path, results_file, config):
                                         shape=(None, max_sentence_len),
                                         name="FFI")
 
+    print('SHAPE feedforward_inputs', feedforward_inputs)
+
     # autoencoder_inputs (AEI): inputs for the autoencoder (encoder + decoder).
     # Should contain the unlabeled training data (also padded to max_sentence_len).
     autoencoder_inputs = tf.placeholder(tf.int32,
                                         shape=(None, max_sentence_len),
                                         name="AEI")
+    print('SHAPE autoencoder_inputs', autoencoder_inputs)
 
     outputs = tf.placeholder(tf.float32)  # target
     training = tf.placeholder(tf.bool)  # training or evaluation
@@ -52,6 +52,9 @@ def main(data_path, results_file, config):
     # Not quite sure what is this for
     FFI = tf.reshape(feedforward_inputs, [-1] + [max_sentence_len])
     AEI = tf.reshape(autoencoder_inputs, [-1] + [max_sentence_len])
+
+    print('SHAPE FFI', FFI)
+    print('SHAPE AEI', AEI)
 
     ####################################################################################
     # Embeddings weights
@@ -67,72 +70,62 @@ def main(data_path, results_file, config):
     place = tf.placeholder(tf.float32, shape=(vocab_size, embeddings_size))
     set_embeddings_weights = embeddings_weights.assign(place)
 
-    # TODO: probar alternativa implementada por Cristian
-    # Loading
-    # print('Loading word2vec model...')
-    # w2v_model = KeyedVectors.load('/home/ekokic/thesis/models/google/word2vecGoogle.model')
-    # embeddings_weights = w2v_model.vectors
-    # ## embeddings_weights = np.load(config["embeddings"])["embeddings"]
-    # embeddings_weights = tf.get_variable("embeddings",
-    #                                      embeddings_weights.shape,
-    #                                      initializer=tf.constant_initializer(embeddings_weights),
-    #                                      trainable=config.get("train_embeddings", False))
-
     FFI_embeddings = tf.expand_dims(
         tf.nn.embedding_lookup(embeddings_weights, FFI),
-        axis=-1,
+        axis=1,
         name="FFI_embeddings")
+
+    print('SHAPE FFI_embeddings', FFI_embeddings)
 
     AEI_embeddings = tf.expand_dims(
         tf.nn.embedding_lookup(embeddings_weights, AEI),
-        axis=-1,
+        axis=1,
         name="AEI_embeddings")
+
+    print('SHAPE AEI_embeddings', AEI_embeddings)
 
     ####################################################################################
     # Batch normalization setup & functions
     ####################################################################################
     # to calculate the moving averages of mean and variance
-    # ewma = tf.train.ExponentialMovingAverage(decay=0.99)
-    # # this list stores the updates to be made to average mean and variance
-    # bn_assigns = []
+    ewma = tf.train.ExponentialMovingAverage(decay=0.99)
+    # this list stores the updates to be made to average mean and variance
+    bn_assigns = []
 
-    # def update_batch_normalization(batch, output_name="bn", scope_name="BN"):
-    #     dim = len(batch.get_shape().as_list())
-    #     mean, var = tf.nn.moments(batch, axes=list(range(0, dim - 1)))
-    #     # Function to be used during the learning phase.
-    #     # Normalize the batch and update running mean and variance.
-    #     with tf.variable_scope(scope_name, reuse=tf.AUTO_REUSE):
-    #         running_mean = tf.get_variable("running_mean",
-    #                                        mean.shape,
-    #                                        initializer=tf.constant_initializer(0))
-    #         running_var = tf.get_variable("running_var",
-    #                                       mean.shape,
-    #                                       initializer=tf.constant_initializer(1))
-
-    #     assign_mean = running_mean.assign(mean)
-    #     assign_var = running_var.assign(var)
-    #     bn_assigns.append(ewma.apply([running_mean, running_var]))
-
-    #     with tf.control_dependencies([assign_mean, assign_var]):
-    #         z = (batch - mean) / tf.sqrt(var + 1e-10)
-    #         return tf.identity(z, name=output_name)
-
-    def batch_normalization(batch, output_name="bn"):
-
+    def update_batch_normalization(batch, output_name="bn", scope_name="BN"):
         dim = len(batch.get_shape().as_list())
         mean, var = tf.nn.moments(batch, axes=list(range(0, dim - 1)))
-        # if mean is None or var is None:
-        #     dim = len(batch.get_shape().as_list())
-        #     mean, var = tf.nn.moments(batch, axes=list(range(0, dim - 1)))
+        # Function to be used during the learning phase.
+        # Normalize the batch and update running mean and variance.
+        with tf.variable_scope(scope_name, reuse=tf.AUTO_REUSE):
+            running_mean = tf.get_variable("running_mean",
+                                           mean.shape,
+                                           initializer=tf.constant_initializer(0))
+            running_var = tf.get_variable("running_var",
+                                          mean.shape,
+                                          initializer=tf.constant_initializer(1))
+
+        assign_mean = running_mean.assign(mean)
+        assign_var = running_var.assign(var)
+        bn_assigns.append(ewma.apply([running_mean, running_var]))
+
+        with tf.control_dependencies([assign_mean, assign_var]):
+            z = (batch - mean) / tf.sqrt(var + 1e-10)
+            return tf.identity(z, name=output_name)
+
+    def batch_normalization(batch, mean=None, var=None, output_name="bn"):
+        if mean is None or var is None:
+            dim = len(batch.get_shape().as_list())
+            mean, var = tf.nn.moments(batch, axes=list(range(0, dim - 1)))
         z = (batch - mean) / tf.sqrt(var + tf.constant(1e-10))
         return tf.identity(z, name=output_name)
 
     ####################################################################################
     # Encoder
     ####################################################################################
-    def encoder_layer(z_pre, noise_std, activation):
+    def encoder_bloc(h, layer_spec, noise_std, update_BN, activation):
         # Run the layer
-        # z_pre = run_layer(h, layer_spec, output_name="z_pre")
+        z_pre = run_layer(h, layer_spec, output_name="z_pre")
 
         # Compute mean and variance of z_pre (to be used in the decoder)
         dim = len(z_pre.get_shape().as_list())
@@ -140,26 +133,25 @@ def main(data_path, results_file, config):
         # Create a variable to store the values for latter retrieving them
         _ = tf.identity(mean, name="mean"), tf.identity(var, name="var")
 
-        # # Batch normalization
-        # def training_batch_norm():
-        #     if update_BN:
-        #         z = update_batch_normalization(z_pre)
-        #     else:
-        #         z = batch_normalization(z_pre)
-        #     return z
+        # Batch normalization
+        def training_batch_norm():
+            if update_BN:
+                z = update_batch_normalization(z_pre)
+            else:
+                z = batch_normalization(z_pre)
+            return z
 
-        # def eval_batch_norm():
-        #     with tf.variable_scope("BN", reuse=tf.AUTO_REUSE):
-        #         mean = ewma.average(tf.get_variable("running_mean",
-        #                                             shape=z_pre.shape[-1]))
-        #         var = ewma.average(tf.get_variable("running_var",
-        #                                            shape=z_pre.shape[-1]))
-        #     z = batch_normalization(z_pre, mean, var)
-        #     return z
+        def eval_batch_norm():
+            with tf.variable_scope("BN", reuse=tf.AUTO_REUSE):
+                mean = ewma.average(tf.get_variable("running_mean",
+                                                    shape=z_pre.shape[-1]))
+                var = ewma.average(tf.get_variable("running_var",
+                                                   shape=z_pre.shape[-1]))
+            z = batch_normalization(z_pre, mean, var)
+            return z
 
         # Perform batch norm depending to the phase (training or testing)
-        # z = tf.cond(training, training_batch_norm, eval_batch_norm)
-        z = batch_normalization(z_pre)
+        z = tf.cond(training, training_batch_norm, eval_batch_norm)
         z += tf.random_normal(tf.shape(z)) * noise_std
         z = tf.identity(z, name="z")
 
@@ -173,70 +165,48 @@ def main(data_path, results_file, config):
         h = activation(z * gamma + beta)
         return tf.identity(h, name="h")
 
-    def encoder(x, noise_std):
+    def encoder(h, noise_std, update_BN):
         # Perform encoding for each layer
-        x += tf.random_normal(tf.shape(x)) * noise_std
-        x = tf.identity(x, "h0")
+        h += tf.random_normal(tf.shape(h)) * noise_std
+        h = tf.identity(h, "h0")
 
-        # Build the "wide" convolutional layer for each conv_kernel
-        # This is the "first" layer
-        conv_features = []
-        weight_variables = []
-        for i, ksize in enumerate(conv_kernels, start=1):
-            with tf.variable_scope("encoder_bloc_" + str(i), reuse=tf.AUTO_REUSE):
-                W = tf.get_variable("W",
-                                    (ksize, embeddings_size, 1, conv_filters),
-                                    initializer=tf.truncated_normal_initializer())
-                weight_variables.append(W)
-                z_pre = tf.nn.conv2d(x, W, strides=[1, 1, 1, 1],
-                                     padding="VALID", name="z_pre")
-                h = encoder_layer(z_pre, noise_std,  # update_BN=update_BN,
-                                  activation=tf.nn.relu)
-                h = tf.nn.max_pool(h,
-                                   ksize=[1, max_sentence_len - ksize + 1, 1, 1],
-                                   strides=[1, 1, 1, 1],
-                                   padding="VALID",
-                                   name="global_max_pool")
-                conv_features.append(h)
-
-        # Build the features layer ("second" layer)
-        total_kernels = len(conv_kernels)
-        total_conv_features = total_kernels * conv_filters
-        with tf.variable_scope("encoder_bloc_" + str(total_kernels + 1), reuse=tf.AUTO_REUSE):
-            h = tf.concat(conv_features, 3)
-            h = tf.reshape(h, (-1, total_conv_features), name="h")
-
-        # Build the features to classes layer ("last" layer)
-        with tf.variable_scope("encoder_bloc_" + str(total_kernels + 2), reuse=tf.AUTO_REUSE):
-            W = tf.get_variable("W", (total_conv_features, num_classes),
-                                initializer=tf.random_normal_initializer())
-            weight_variables.append(W)
-            z_pre = tf.matmul(h, W, name="z_pre")
-            h = encoder_layer(z_pre, noise_std,  # update_BN=update_BN,
-                              activation=tf.nn.softmax)
+        for i, layer_spec in enumerate(layers):
+            print("Building encoder layer %s for %s encoder" %
+                  (layer_spec["name"], "corrupted" if noise_std > 0 else "clean"),
+                  file=sys.stderr)
+            with tf.variable_scope("encoder_bloc_" + str(i + 1), reuse=tf.AUTO_REUSE):
+                # Create an encoder bloc if the layer type is dense or conv2d
+                if layer_spec["type"] == "flat":
+                    h = flat(h, output_name="h")
+                elif layer_spec["type"] == "max_pool":
+                    h = max_pool(h, layer_spec, output_name="h")
+                else:
+                    if i == L - 1:
+                        activation = tf.nn.softmax  # Only for the last layer
+                    else:
+                        activation = tf.nn.relu
+                    h = encoder_bloc(h, layer_spec, noise_std,
+                                     update_BN=update_BN,
+                                     activation=activation)
 
         y = tf.identity(h, name="y")
-        return y, weight_variables
+        return y
 
     noise_std = config['noise_std']
 
     with tf.name_scope("FF_clean"):
         # output of the clean encoder. Used for prediction
-        FF_y, weight_variables = encoder(FFI_embeddings, 0)  # , update_BN=False)
+        FF_y = encoder(FFI_embeddings, 0, update_BN=False)
     with tf.name_scope("FF_corrupted"):
         # output of the corrupted encoder. Used for training.
-        FF_y_corr, _ = encoder(FFI_embeddings, noise_std)  # , update_BN=False)
+        FF_y_corr = encoder(FFI_embeddings, noise_std, update_BN=False)
 
     with tf.name_scope("AE_clean"):
         # corrupted encoding of unlabeled instances
-        AE_y, _ = encoder(AEI_embeddings, 0)  # , update_BN=True)
+        AE_y = encoder(AEI_embeddings, 0, update_BN=True)
     with tf.name_scope("AE_corrupted"):
         # corrupted encoding of unlabeled instances
-        AE_y_corr, _ = encoder(AEI_embeddings, noise_std)  # , update_BN=False)
-
-    l2_reg = tf.constant(0.0)
-    for we_var in weight_variables:
-        l2_reg += tf.nn.l2_loss(we_var)
+        AE_y_corr = encoder(AEI_embeddings, noise_std, update_BN=False)
 
     ####################################################################################
     # Decoder
@@ -268,6 +238,21 @@ def main(data_path, results_file, config):
             z_est = (z_c - mu) * v + mu
         return tf.identity(z_est, name=output_name)
 
+    def decoder_bloc(u, z_corr, mean, var, layer_spec=None):
+        # Performs the decoding operations of a corresponding encoder bloc
+        # Denoising
+        z_est = g_gauss(z_corr, u)
+
+        z_est_BN = (z_est - mean) / tf.sqrt(var + tf.constant(1e-10))
+        z_est_BN = tf.identity(z_est_BN, name="z_est_BN")
+
+        # run transposed layer
+        if layer_spec is not None:
+            u = run_transpose_layer(z_est, layer_spec)
+            u = batch_normalization(u, output_name="u")
+
+        return u, z_est_BN
+
     def get_tensor(input_name, num_encoder_bloc, name_tensor):
         return tf.get_default_graph().\
             get_tensor_by_name(input_name + "/encoder_bloc_" +
@@ -276,75 +261,35 @@ def main(data_path, results_file, config):
     denoising_cost = config['denoising_cost']
     d_cost = []
     u = batch_normalization(AE_y_corr, output_name="u_L")
+    for i in range(L, 0, -1):
+        layer_spec = layers[i - 1]
+        print("Building decoder layer %s" % layer_spec["name"], file=sys.stderr)
 
-    # Build first decoder layer (corresponding to the dense layer)
-    total_kernels = len(conv_kernels)
-    total_conv_features = total_kernels * conv_filters
-    with tf.variable_scope("decoder_bloc_" + str(total_kernels + 2), reuse=tf.AUTO_REUSE):
-        z_corr = get_tensor("AE_corrupted", total_kernels + 2, "z")
-        z = get_tensor("AE_clean", total_kernels + 2, "z")
-        mean = get_tensor("AE_clean", total_kernels + 2, "mean")
-        var = get_tensor("AE_clean", total_kernels + 2, "var")
-        # Performs the decoding operations of a corresponding encoder bloc
-        # Denoising
-        z_est = g_gauss(z_corr, u)
-
-        z_est_BN = (z_est - mean) / tf.sqrt(var + tf.constant(1e-10))
-        z_est_BN = tf.identity(z_est_BN, name="z_est_BN")
-
-        # run decoder layer
-        V = tf.get_variable("V", (num_classes, total_conv_features),
-                            initializer=tf.random_normal_initializer())
-        l2_reg += tf.nn.l2_loss(V)
-        u = tf.matmul(z_est, V)
-        u = batch_normalization(u, output_name="u")
-
-        d_cost.append((tf.reduce_mean(tf.square(z_est_BN - z))) * denoising_cost[2])
-
-    # Build second decoder layer (corresponding to the concatenation+flat layer)
-    with tf.variable_scope("decoder_bloc_" + str(total_kernels + 1), reuse=tf.AUTO_REUSE):
-        u = tf.reshape(u, (-1, 1, 1, total_conv_features))
-        deconv_features = tf.split(u, total_kernels, axis=3)
-
-    # Build the final "wide convolutional" layer
-    deconv_layers = []
-    for i, gmp_layer in enumerate(deconv_features, start=1):
-        ksize = conv_kernels[i - 1]
         with tf.variable_scope("decoder_bloc_" + str(i), reuse=tf.AUTO_REUSE):
-            u = tf.keras.layers.UpSampling2D(
-                size=(max_sentence_len - ksize + 1, 1))(gmp_layer)
+            if layer_spec["type"] in ["max_pool", "flat"]:
+                # if the layer is max pooling or "flat", the transposed layer is run
+                # without creating a decoder bloc.
+                h = get_tensor("AE_corrupted", i - 1, "h")
+                output_shape = tf.shape(h)
+                u = run_transpose_layer(u, layer_spec, output_shape=output_shape)
+            else:
+                z_corr = get_tensor("AE_corrupted", i, "z")
+                z = get_tensor("AE_clean", i, "z")
+                mean = get_tensor("AE_clean", i, "mean")
+                var = get_tensor("AE_clean", i, "var")
 
-            z_corr = get_tensor("AE_corrupted", i, "z")
-            z = get_tensor("AE_clean", i, "z")
-            mean = get_tensor("AE_clean", i, "mean")
-            var = get_tensor("AE_clean", i, "var")
-            z_est = g_gauss(z_corr, u)
-
-            z_est_BN = (z_est - mean) / tf.sqrt(var + tf.constant(1e-10))
-            z_est_BN = tf.identity(z_est_BN, name="z_est_BN")
-
-            # run deconvolutional (transposed convolution) layer
-            V = tf.get_variable("V",
-                                (ksize, embeddings_size, 1, conv_filters),
-                                initializer=tf.truncated_normal_initializer())
-            l2_reg += tf.nn.l2_loss(V)
-
-            u = tf.nn.conv2d_transpose(z_est, V,
-                                       output_shape=tf.shape(AEI_embeddings),
-                                       strides=[1, 1, 1, 1], padding='VALID')
-            u = batch_normalization(u, output_name="u")
-            deconv_layers.append(u)
-            d_cost.append((tf.reduce_mean(tf.square(z_est_BN - z))) * denoising_cost[1])
+                u, z_est_BN = decoder_bloc(u, z_corr, mean, var,
+                                           layer_spec=layer_spec)
+                d_cost.append((tf.reduce_mean(tf.square(z_est_BN - z))) * denoising_cost[i])
 
     # last decoding step
-    u = tf.concat(deconv_layers, 2)
     with tf.variable_scope("decoder_bloc_0", reuse=tf.AUTO_REUSE):
         z_corr = tf.get_default_graph().get_tensor_by_name("AE_corrupted/h0:0")
-        z_corr = tf.concat([z_corr] * total_kernels, 2)
         z = tf.get_default_graph().get_tensor_by_name("AE_clean/h0:0")
-        z = tf.concat([z] * total_kernels, 2)
-        z_est = g_gauss(z_corr, u)
-        d_cost.append((tf.reduce_mean(tf.square(z_est - z))) * denoising_cost[0])
+        mean, var = tf.constant(0.0), tf.constant(1.0)
+
+        u, z_est_BN = decoder_bloc(u, z_corr, mean, var)
+        d_cost.append((tf.reduce_mean(tf.square(z_est_BN - z))) * denoising_cost[0])
 
     ####################################################################################
     # Loss, accuracy and optimization
@@ -354,7 +299,7 @@ def main(data_path, results_file, config):
     corr_pred_cost = -tf.reduce_mean(tf.reduce_sum(outputs * tf.log(FF_y_corr), 1))  # supervised cost
     clean_pred_cost = -tf.reduce_mean(tf.reduce_sum(outputs * tf.log(FF_y), 1))
 
-    loss = corr_pred_cost + u_cost + config.get("lambda", 0.0) * l2_reg  # total cost
+    loss = corr_pred_cost + u_cost  # total cost
 
     predictions = tf.argmax(FF_y, 1)
     correct_prediction = tf.equal(predictions, tf.argmax(outputs, 1))
@@ -366,9 +311,9 @@ def main(data_path, results_file, config):
     train_step = tf.train.AdamOptimizer(learning_rate).minimize(loss)
 
     # add the updates of batch normalization statistics to train_step
-    # bn_updates = tf.group(*bn_assigns)
-    # with tf.control_dependencies([train_step]):
-    #     train_step = tf.group(bn_updates)
+    bn_updates = tf.group(*bn_assigns)
+    with tf.control_dependencies([train_step]):
+        train_step = tf.group(bn_updates)
 
     n = np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])
     print("There is a total of %d trainable parameters" % n, file=sys.stderr)
@@ -389,74 +334,98 @@ def main(data_path, results_file, config):
     num_iter = (num_examples // batch_size) * num_epochs  # number of loop iterations
 
     print("===  Starting Session ===", file=sys.stderr)
-    dev_config = tf.ConfigProto()
-    # Don't pre-allocate memory; allocate as-needed
-    dev_config.gpu_options.allow_growth = True
-    # Only allow a total of half the GPU memory to be allocated
-    dev_config.gpu_options.per_process_gpu_memory_fraction = 1#0.5
-    sess = tf.Session(config=dev_config)
-
-    if not os.path.exists(results_file):
-        results_log = open(results_file, "w")
-        print("experiment,split,epoch,accuracy,lloss,true,pred", file=results_log)
-
-    else:
-        results_log = open(results_file, "a")
+    sess = tf.Session()
+    results_log = open(results_file, "w")
+    print("experiment,split,epoch,accuracy,lloss,true,pred", file=results_log)
 
     init = tf.global_variables_initializer()
     sess.run(init)
 
     print('=== Initializing embeddings with pre-trained weights ===')  # DUDA: es correcto?
-    sess.run(set_embeddings_weights, feed_dict={place: w2v_model.syn0})  #.vectors})
+    sess.run(set_embeddings_weights, feed_dict={place: w2v_model.vectors})  # syn0})
+
+    print("=== Initial stats ===", file=sys.stderr)
+    initial_stats = sess.run(
+        [accuracy, clean_pred_cost, predictions],
+        feed_dict={feedforward_inputs: data.train.labeled_ds.instances,
+                   outputs: data.train.labeled_ds.labels,
+                   training: False})
+    print("Initial Accuracy for Training Data: %.3g" % initial_stats[0], file=sys.stderr)
+    print("Initial Supervised Cost for Training Data: %.3g" % initial_stats[1], file=sys.stderr)
+
+    true_labels = np.argmax(data.train.labeled_ds.labels, 1)
+    for i in np.arange(true_labels.shape[0]):
+        print("%s,training,0,%.3g,%.3g,%d,%d" %
+              (config["experiment_id"],
+               initial_stats[0],
+               initial_stats[1],
+               true_labels[i],
+               initial_stats[2][i]), file=results_log)
+
+    # For validation data we traverse in batches and save all the information
+    validation_instances = data.validation.instances
+    validation_labels = data.validation.labels
+    mean_accuracy = []
+    mean_loss = []
+
+    for start in trange(0, len(validation_labels), batch_size):
+        end = min(start + batch_size, len(validation_labels))
+        initial_stats = sess.run(
+            [accuracy, clean_pred_cost, predictions],
+            feed_dict={feedforward_inputs: validation_instances[start:end],
+                       outputs: validation_labels[start:end],
+                       training: False})
+        mean_accuracy.append(initial_stats[0])
+        mean_loss.append(initial_stats[1])
+
+        true_labels = np.argmax(validation_labels[start:end], 1)
+        for i in np.arange(true_labels.shape[0]):
+            print("%s,validation,0,%.3g,%.3g,%d,%d" %
+                  (config["experiment_id"],
+                   initial_stats[0],
+                   initial_stats[1],
+                   true_labels[i],
+                   initial_stats[2][i]), file=results_log)
+
+    print("Initial Accuracy for Validation Data: %.3g" % np.mean(mean_accuracy), file=sys.stderr)
+    print("Initial Supervised Cost for Validation Data: %.3g" % np.mean(mean_loss), file=sys.stderr)
+
+    results_log.flush()
 
     print("=== Training Start ===", file=sys.stderr)
-    tr = trange(0, num_iter, desc="iter: nan - loss: nan")
-    for i in tr:
+    for i in trange(0, num_iter):
         labeled_instances, labels, unlabeled_instances = data.train.next_batch(batch_size)
 
-        _, tloss, lloss = sess.run([train_step, loss, clean_pred_cost],
-                                   feed_dict={feedforward_inputs: labeled_instances,
-                                              outputs: labels,
-                                              autoencoder_inputs: unlabeled_instances,
-                                              training: True})
-        tr.set_description("loss: %.5g - lloss: %.5g" % (tloss, lloss))
+        sess.run(train_step, feed_dict={feedforward_inputs: labeled_instances,
+                                        outputs: labels,
+                                        autoencoder_inputs: unlabeled_instances,
+                                        training: True})
 
-        if (i > 1) and ((i + 1) % (num_iter / num_epochs) == 0) and i < num_iter - 1:
+        if (i > 1) and ((i + 1) % (num_iter / num_epochs) == 0):
             # Compute train and validation stats for each epoch
             epoch_n = i // (num_examples // batch_size) + 1
 
             tqdm.write("=== Epoch %d stats ===" % epoch_n, file=sys.stderr)
-            # For training data we traverse in batches and save all the information
-            training_instances = data.train.labeled_ds.instances
-            training_labels = data.train.labeled_ds.labels
-            mean_accuracy = []
-            mean_loss = []
-
-            for start in trange(0, len(training_labels), batch_size):
-                end = min(start + batch_size, len(training_labels))
-                epoch_stats = sess.run(
-                    [accuracy, clean_pred_cost, predictions],
-                    feed_dict={feedforward_inputs: training_instances[start:end],
-                               outputs: training_labels[start:end],
-                               training: False})
-
-                mean_accuracy.append(epoch_stats[0])
-                mean_loss.append(epoch_stats[1])
-
-                true_labels = np.argmax(training_labels[start:end], 1)
-                for i in np.arange(true_labels.shape[0]):
-                    print("%s,training,%d,%.3g,%.3g,%d,%d" %
-                          (config["experiment_id"],
-                           epoch_n,
-                           epoch_stats[0],
-                           epoch_stats[1],
-                           true_labels[i],
-                           epoch_stats[2][i]), file=results_log)
+            epoch_stats = sess.run(
+                [accuracy, clean_pred_cost, predictions],
+                feed_dict={feedforward_inputs: labeled_instances,
+                           outputs: labels,
+                           training: False})
 
             tqdm.write("Epoch %d: Accuracy for Training Data: %.3g" %
-                       (epoch_n, np.mean(mean_accuracy)), file=sys.stderr)
+                       (epoch_n, epoch_stats[0]), file=sys.stderr)
             tqdm.write("Epoch %d: Supervised Cost for Training Data: %.3g" %
-                       (epoch_n, np.mean(mean_loss)), file=sys.stderr)
+                       (epoch_n, epoch_stats[1]), file=sys.stderr)
+
+            true_labels = np.argmax(labels, 1)
+            for i in np.arange(true_labels.shape[0]):
+                print("%s,training,%d,%.3g,%.3g,%d,%d" %
+                      (config["experiment_id"],
+                       epoch_n,
+                       epoch_stats[0],
+                       epoch_stats[1],
+                       true_labels[i],
+                       epoch_stats[2][i]), file=results_log)
 
             # For validation data we traverse in batches and save all the information
             validation_instances = data.validation.instances
@@ -503,34 +472,23 @@ def main(data_path, results_file, config):
     print("=== Final stats ===", file=sys.stderr)
     epoch_n = num_iter // (num_examples // batch_size) + 1
 
-    training_instances = data.train.labeled_ds.instances
-    training_labels = data.train.labeled_ds.labels
-    mean_accuracy = []
-    mean_loss = []
+    final_stats = sess.run(
+        [accuracy, clean_pred_cost, predictions],
+        feed_dict={feedforward_inputs: data.train.labeled_ds.instances,
+                   outputs: data.train.labeled_ds.labels,
+                   training: False})
+    print("Final Accuracy for Training Data: %.3g" % final_stats[0], file=sys.stderr)
+    print("Final Supervised Cost for Training Data: %.3g" % final_stats[1], file=sys.stderr)
 
-    for start in trange(0, len(training_labels), batch_size):
-        end = min(start + batch_size, len(training_labels))
-        final_stats = sess.run(
-            [accuracy, clean_pred_cost, predictions],
-            feed_dict={feedforward_inputs: training_instances[start:end],
-                       outputs: training_labels[start:end],
-                       training: False})
-
-        mean_accuracy.append(final_stats[0])
-        mean_loss.append(final_stats[1])
-
-        true_labels = np.argmax(training_labels[start:end], 1)
-        for i in np.arange(true_labels.shape[0]):
-            print("%s,training,%d,%.3g,%.3g,%d,%d" %
-                  (config["experiment_id"],
-                   epoch_n,
-                   final_stats[0],
-                   final_stats[1],
-                   true_labels[i],
-                   final_stats[2][i]), file=results_log)
-
-    print("Final Accuracy for Training Data: %.3g" % np.mean(mean_accuracy), file=sys.stderr)
-    print("Final Supervised Cost for Training Data: %.3g" % np.mean(mean_loss), file=sys.stderr)
+    true_labels = np.argmax(data.train.labeled_ds.labels, 1)
+    for i in np.arange(true_labels.shape[0]):
+        print("%s,training,%d,%.3g,%.3g,%d,%d" %
+              (config["experiment_id"],
+               epoch_n,
+               final_stats[0],
+               final_stats[1],
+               true_labels[i],
+               final_stats[2][i]), file=results_log)
 
     # For validation data we traverse in batches and save all the information
     validation_instances = data.validation.instances

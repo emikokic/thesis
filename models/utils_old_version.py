@@ -38,7 +38,7 @@ def unpool(value, layer_spec, output_shape, name='unpool'):
         kernel_value = np.zeros((kernel_rows, kernel_cols,
                                  num_channels, num_channels),
                                 dtype=input_dtype_as_numpy)
-        kernel_value[0, 0, :, :] = np.eye(num_channels, num_channels)
+        kernel_value[:, :, :, :] = np.eye(num_channels, num_channels)
         kernel = tf.constant(kernel_value)
 
         # do the un-pooling using conv2d_transpose
@@ -65,6 +65,9 @@ def run_layer(x, layer_spec, output_name):
                                         layer_spec["input_filters"],
                                         layer_spec["output_filters"]),
                                   initializer=tf.random_normal_initializer())
+
+        print('input shape', x.shape)
+        print('filter shape', filters.shape)
         return tf.nn.conv2d(x, filters, strides=[1, 1, 1, 1], padding='SAME',
                             name=output_name)
 

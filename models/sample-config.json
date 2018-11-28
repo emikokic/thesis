@@ -1,0 +1,22 @@
+{
+   "num_classes" : 5,
+   "denoising_cost" : [
+      1000,
+      10,
+      0.01
+   ],
+   "noise_std" : 0.3,
+   "decay_after" : 10,
+   "experiment_id" : "exp_1_a",
+   "num_labeled" : 100000,
+   "embeddings_size" : 300,
+   "batch_size" : 1024,
+   "num_epochs" : 50,
+   "max_sentence_len" : 5,
+   "starter_learning_rate" : 0.02,
+   "vocab_size" : 3000000,
+   "conv_kernels": [2,3,4],
+   "conv_filters": 3000,
+   "train_embeddings": false,
+   "lambda": 0.0
+}
