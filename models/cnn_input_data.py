@@ -44,8 +44,8 @@ def tagToInt(tag):
 
 def preprocess_data(train_data, val_data, test_data, w2v_model, n_classes):
 
-    X_train = train_data['words'].values[:100000]
-    y_train = train_data['entityType'].values[:100000]
+    X_train = train_data['words'].values
+    y_train = train_data['entityType'].values
     X_val = val_data['words'].values[:20000]
     y_val = val_data['entityType'].values[:20000]
     X_test = test_data['words'].values[:20000]
@@ -134,24 +134,40 @@ class SemiDataSet(object):
     def __init__(self, instances, labels, n_labeled, n_classes):
         self.n_labeled = n_labeled
 
+        # # Unlabled DataSet
+        # self.unlabeled_ds = DataSet(instances, []) # DUDA: estas dos lineas deberia cambiar para
+        #                                            # el experimento 3 (datos no anotados sean disjuntos
+        #                                            # a los no anotados)?
+        # self.num_examples = self.unlabeled_ds.num_examples
+
+        # # Labeled DataSet
+        # indices = np.arange(self.num_examples)
+        # shuffled_indices = np.random.permutation(indices)
+        # instances = instances[shuffled_indices]
+        # labels = labels[shuffled_indices]
+        # y = np.array([np.arange(n_classes)[lbl == 1][0] for lbl in labels])
+        # n_from_each_class = n_labeled // n_classes
+        # i_labeled = []
+        # for c in range(n_classes):
+        #     i = indices[y == c][:n_from_each_class]
+        #     i_labeled += list(i)
+        # l_instances = instances[i_labeled]
+        # l_labels = labels[i_labeled]
+        # self.labeled_ds = DataSet(l_instances, l_labels)
+
+
+        ##### Experimento 3 ##### (descomentar lo siguiente solo si se quiere excluir que
+                                 # los datos anotados se utilicen como anotados)
         # Unlabled DataSet
-        self.unlabeled_ds = DataSet(instances, [])
-        self.num_examples = self.unlabeled_ds.num_examples
+        self.unlabeled_ds = DataSet(instances[n_labeled:], [])
+        self.num_examples = instances.shape[0] # self.unlabeled_ds.num_examples 
 
         # Labeled DataSet
-        indices = np.arange(self.num_examples)
-        shuffled_indices = np.random.permutation(indices)
-        instances = instances[shuffled_indices]
-        labels = labels[shuffled_indices]
-        y = np.array([np.arange(n_classes)[lbl == 1][0] for lbl in labels])
-        n_from_each_class = n_labeled // n_classes
-        i_labeled = []
-        for c in range(n_classes):
-            i = indices[y == c][:n_from_each_class]
-            i_labeled += list(i)
-        l_instances = instances[i_labeled]
-        l_labels = labels[i_labeled]
-        self.labeled_ds = DataSet(l_instances, l_labels)
+        l_instances = instances[0:n_labeled]
+        l_labels = labels[0:n_labeled]
+        self.labeled_ds = DataSet(l_instances, l_labels)       
+
+
 
     def next_batch(self, batch_size):
         unlabeled_instances, _ = self.unlabeled_ds.next_batch(batch_size)
@@ -175,7 +191,7 @@ def read_data_sets(data_path, n_classes, n_labeled=100, fake_data=False, maxlen=
         return data_sets
 
     print('Loading dataset...')
-    train_data = pd.read_csv('%swords_entity_W_2_cnn_train.csv' % data_path)
+    train_data = pd.read_csv('%swords_entity_W_2_cnn_train_exp_3.csv' % data_path)
     val_data = pd.read_csv('%swords_entity_W_2_cnn_dev.csv' % data_path)
     test_data = pd.read_csv('%swords_entity_W_2_cnn_test.csv' % data_path)
 
