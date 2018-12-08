@@ -282,6 +282,29 @@ def load_docs(doc_filenames, coarseNE_filenames):
     return docs_df, coarseNE_df 
 
 
+def generate_seq_tag_instances(articles_df, entities_df, max_sen_length, splitType):
+    # NOTE: splitType parameter should be 'train' or 'dev' or 'test'
+    sentences = []
+    entities = []
+    for art_ID in tqdm(np.nditer(articles_df.art_ID.unique())):
+        article_df = articles_df[articles_df.art_ID == art_ID]
+        art_entities_df = entities_df[entities_df.art_ID == art_ID] 
+        article_df = article_df.reset_index(drop=True) # this is important for the entity matching.
+        article_df['sen_length'] = article_df['sentence'].map(lambda x: len(x))
+        fun = lambda senIdx: entityListFromSentence(senIdx, article_df.loc[senIdx, 'sen_length'],
+                                                     art_entities_df)    
+        article_df['entities'] = article_df.index.map(fun)
+        sentences += list(article_df['sentence'])
+        entities += list(article_df['entities'])
+
+    instances = pd.DataFrame.from_dict({'sentence':sentences, 'entities':entities})
+    # Truncate by max_sen_length
+    instances['sentence'] = instances.sentence.apply(lambda sen: sen[:max_sen_length])
+    instances['entities'] = instances.entities.apply(lambda sen: sen[:max_sen_length])
+    instances.to_csv('../corpus_WiNER/seq_tag_instances/sen_entities_max_len_' +
+                     str(max_sen_length) + '_' + splitType + '.csv', index=False)
+
+    
 def main():
     start = time.time()
     create_docs_df('./Documents/', './docs_df/')
