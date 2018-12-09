@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
+import os
 from os import path
 from keras.models import Model
 from keras.layers import Dense, Dropout, Flatten, Input, concatenate
@@ -13,7 +14,7 @@ from keras.layers import Conv1D, MaxPooling1D, BatchNormalization, Embedding
 from keras import regularizers, optimizers
 from keras.utils import to_categorical
 from keras.losses import categorical_crossentropy
-from keras.callbacks import History
+from keras.callbacks import History, ModelCheckpoint, CSVLogger
 from gensim.models import KeyedVectors
 
 
@@ -21,9 +22,9 @@ NUM_CLASSES = 5  # PER - LOC - ORG - MISC - O
 
 
 def load_dataset():
-    train_data = pd.read_csv('./thesis/corpus_WiNER/cnn_instances/words_entity_W_2_cnn_train.csv')
-    dev_data = pd.read_csv('./thesis/corpus_WiNER/cnn_instances/words_entity_W_2_cnn_dev.csv')
-    test_data = pd.read_csv('./thesis/corpus_WiNER/cnn_instances/words_entity_W_2_cnn_test.csv')
+    train_data = pd.read_csv('~/thesis/corpus_WiNER/cnn_instances/words_entity_W_2_cnn_train.csv')
+    dev_data = pd.read_csv('~/thesis/corpus_WiNER/cnn_instances/words_entity_W_2_cnn_dev.csv')
+    test_data = pd.read_csv('~/thesis/corpus_WiNER/cnn_instances/words_entity_W_2_cnn_test.csv')
 
     return train_data, dev_data, test_data
 
@@ -52,10 +53,10 @@ def tagToInt(tag):
     return {'PER': 0, 'LOC': 1, 'ORG': 2, 'MISC': 3, 'O': 4}[tag]
 
 
-def preprocess_data(train_data, dev_data, test_data, w2v_model):
+def preprocess_data(train_data, dev_data, test_data, w2v_model, train_examples_rate):
 
-    X_train = train_data['words'].values[:100000]
-    y_train = train_data['entityType'].values[:100000]
+    X_train = train_data['words'].values[:int(100000 * train_examples_rate)]
+    y_train = train_data['entityType'].values[:int(100000 * train_examples_rate)]
     X_dev = dev_data['words'].values[:20000]
     y_dev = dev_data['entityType'].values[:20000]
     X_test = test_data['words'].values[:20000]
@@ -77,7 +78,7 @@ def preprocess_data(train_data, dev_data, test_data, w2v_model):
     return X_train, X_dev, X_test, y_train, y_dev, y_test
 
 
-def build_model(h_params, input_shape):
+def build_model(h_params, input_shape, w2v_model):
     ''' shape: A shape tuple (integer), not including the batch size.
         For instance, `shape=(32,)` indicates that the expected input
         will be batches of 32-dimensional vectors.'''
@@ -121,6 +122,10 @@ def build_model(h_params, input_shape):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='CNN baseline experiment')
+    parser.add_argument('--train_examples_rate',
+                        default=1,
+                        type=float,
+                        help='1 -> 100%,  0.25 -> 25%, etc.')
     parser.add_argument('--num_filters',
                         default=10,
                         type=int,
@@ -149,18 +154,27 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    train_examples_rate = args.train_examples_rate
+    num_filters = args.num_filters
+    pool_size = args.pool_size
+    drop = args.drop
+    l2 = args.l2
+    batch_size = args.batch_size
+    epochs = args.epochs
+
     print('Loading dataset...')
     train_data, dev_data, test_data = load_dataset()
 
     print('Loading word2vec model...')
-    w2v_model = KeyedVectors.load('./thesis/models/google/word2vecGoogle.model')
+    w2v_model = KeyedVectors.load('/home/ekokic/thesis/models/google/word2vecGoogle.model')
 
     print('Preprocessing input data...')
     X_train, X_dev, X_test, y_train, y_dev, y_test = preprocess_data(train_data, dev_data,
-                                                                     test_data, w2v_model)
+                                                                     test_data, w2v_model,
+                                                                     train_examples_rate)
     print('Building model...')
     input_shape = (X_train.shape[1], )  # == 2 * W + 1
-    model = build_model(args, input_shape)
+    model = build_model(args, input_shape, w2v_model)
 
     print('Compiling model...')
     model.compile(loss=categorical_crossentropy,
@@ -168,33 +182,46 @@ if __name__ == '__main__':
                   metrics=['accuracy'])
 
     print('Training model...')
-    # history = History()
-    history = model.fit(X_train, y_train,
-                        batch_size=args.batch_size,
-                        epochs=args.epochs,
-                        verbose=0,
-                        validation_data=(X_dev, y_dev))  # ,
-    # callbacks=[history])
-
     args = list(vars(args).items())
-    experiment_name = 'cnn'
+    experiment_name = 'cnn_wide_supervised'
     for key, value in args:
         experiment_name += ('_' + str(key) + '_' + str(value))
+    if not os.path.exists('experiments' + '/' + experiment_name):
+        os.makedirs('experiments' + '/' + experiment_name)
 
-    print('Saving model metrics...')
-    train_loss = np.array(history.history['loss'])[-1]
-    dev_loss = np.array(history.history['val_loss'])[-1]
-    train_acc = np.array(history.history['acc'])[-1]
-    dev_acc = np.array(history.history['val_acc'])[-1]
+    callbacks = [
+        ModelCheckpoint(filepath=os.path.join('experiments', experiment_name,
+                                              'weights.{epoch:02d}-{val_loss:.2f}.hdf5'),
+                        monitor='val_acc',
+                        verbose=1,
+                        save_best_only=True,
+                        save_weights_only=False,
+                        mode='auto'),
+        CSVLogger(filename=os.path.join('experiments', experiment_name, 'train_logs.csv'),
+                  separator=',',
+                  append=False)
+    ]
+    history = model.fit(X_train, y_train,
+                        batch_size=batch_size,
+                        epochs=epochs,
+                        verbose=1,
+                        validation_data=(X_dev, y_dev),
+                        callbacks=callbacks)
 
-    # if not path.exists('../thesis/models/cnn_metrics.csv'):
-    #     with open('./thesis/models/cnn_metrics.csv', 'w', newline='') as csvfile:
+    # print('Saving model metrics...')
+    # train_loss = np.array(history.history['loss'])
+    # dev_loss = np.array(history.history['val_loss'])
+    # train_acc = np.array(history.history['acc'])
+    # dev_acc = np.array(history.history['val_acc'])
+
+    # if not path.exists('/home/ekokic/thesis/models/experiments/cnn_wide_metrics.csv'):
+    #     with open('/home/ekokic/thesis/models/experiments/cnn_wide_metrics.csv', 'w', newline='') as csvfile:
     #         metric_writer = csv.writer(csvfile, delimiter=',')
     #         metric_writer.writerow(['model_name', 'train_loss', 'dev_loss', 'train_acc', 'dev_acc'])
 
-    with open('./thesis/models/cnn_metrics.csv', 'a', newline='') as csvfile:
-        metric_writer = csv.writer(csvfile, delimiter=',')
-        metric_writer.writerow([experiment_name, train_loss, dev_loss, train_acc, dev_acc])
+    # with open('/home/ekokic/thesis/models/experiments/cnn_wide_metrics.csv', 'a', newline='') as csvfile:
+    #     metric_writer = csv.writer(csvfile, delimiter=',')
+    #     metric_writer.writerow([experiment_name, train_loss, dev_loss, train_acc, dev_acc])
 
     # history_df = pd.DataFrame({'train_loss': train_loss, 'dev_loss': dev_loss,
     #                            'train_acc': train_acc, 'val_acc': val_acc})
@@ -224,6 +251,6 @@ if __name__ == '__main__':
 # results.to_csv('predictions_{}.csv'.format(args.experiment_name),
 #                index=False)
 
-    print('Saving model...')
+    # print('Saving model...')
     # model.save_weights('./thesis/models/weights/{}.h5'.format(experiment_name))
-    model.save('./thesis/models/saved/{}.h5'.format(experiment_name))
+    # model.save('~/thesis/models/saved/{}.h5'.format(experiment_name))
