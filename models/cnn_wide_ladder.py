@@ -403,7 +403,7 @@ def main(data_path, results_file, config):
     for i in tr:
         labeled_instances, labels, unlabeled_instances = data.train.next_batch(batch_size)
 
-        _, tloss, lloss = sess.run([train_step, loss, corr_pred_cost], # DUDA: clean o corr loss?
+        _, tloss, lloss = sess.run([train_step, loss, clean_pred_cost],
                                    feed_dict={feedforward_inputs: labeled_instances,
                                               outputs: labels,
                                               autoencoder_inputs: unlabeled_instances,
@@ -424,7 +424,7 @@ def main(data_path, results_file, config):
             for start in trange(0, len(training_labels), batch_size):
                 end = min(start + batch_size, len(training_labels))
                 epoch_stats = sess.run(
-                    [accuracy, loss, corr_pred_cost, predictions], # DUDA: clean_pred_cost o corr_pred_cost?
+                    [accuracy, loss, clean_pred_cost, predictions],
                     feed_dict={feedforward_inputs: training_instances[start:end],
                                outputs: training_labels[start:end],
                                autoencoder_inputs: unlabeled_instances,
@@ -458,7 +458,7 @@ def main(data_path, results_file, config):
             for start in trange(0, len(validation_labels), batch_size):
                 end = min(start + batch_size, len(validation_labels))
                 epoch_stats = sess.run(
-                    [accuracy, loss, corr_pred_cost, predictions],
+                    [accuracy, loss, clean_pred_cost, predictions],
                     feed_dict={feedforward_inputs: validation_instances[start:end],
                                outputs: validation_labels[start:end],
                                autoencoder_inputs: unlabeled_instances,
@@ -504,7 +504,7 @@ def main(data_path, results_file, config):
     for start in trange(0, len(training_labels), batch_size):
         end = min(start + batch_size, len(training_labels))
         final_stats = sess.run(
-            [accuracy, loss, corr_pred_cost, predictions],
+            [accuracy, loss, clean_pred_cost, predictions],
             feed_dict={feedforward_inputs: training_instances[start:end],
                        outputs: training_labels[start:end],
                        autoencoder_inputs: unlabeled_instances,
@@ -536,7 +536,7 @@ def main(data_path, results_file, config):
     for start in trange(0, len(validation_labels), batch_size):
         end = min(start + batch_size, len(validation_labels))
         final_stats = sess.run(
-            [accuracy, loss, corr_pred_cost, predictions],
+            [accuracy, loss, clean_pred_cost, predictions],
             feed_dict={feedforward_inputs: validation_instances[start:end],
                        outputs: validation_labels[start:end],
                        autoencoder_inputs: unlabeled_instances,
@@ -566,7 +566,7 @@ def main(data_path, results_file, config):
     for start in trange(0, len(test_labels), batch_size):
         end = min(start + batch_size, len(test_labels))
         final_stats = sess.run(
-            [accuracy, loss, corr_pred_cost, predictions],
+            [accuracy, loss, clean_pred_cost, predictions],
             feed_dict={feedforward_inputs: test_instances[start:end],
                        outputs: test_labels[start:end],
                        autoencoder_inputs: unlabeled_instances,
