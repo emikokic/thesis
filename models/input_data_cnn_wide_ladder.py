@@ -6,17 +6,7 @@ import pandas as pd
 import ast
 from keras.utils import to_categorical
 from gensim.models import KeyedVectors
-# from keras.preprocessing import sequence
 
-
-# def dense_to_one_hot(labels_dense, num_classes):
-#     """Convert class labels from scalars to one-hot vectors."""
-#     labels_dense = np.array(labels_dense)
-#     num_labels = labels_dense.shape[0]
-#     index_offset = np.arange(num_labels) * num_classes
-#     labels_one_hot = np.zeros((num_labels, num_classes))
-#     labels_one_hot.flat[index_offset + labels_dense.ravel()] = 1
-#     return labels_one_hot
 
 def transform_input(instances, mapping):
     """Replaces the words in instances with their index in mapping.
@@ -59,7 +49,7 @@ def preprocess_data(train_data, val_data, test_data, w2v_model, n_classes):
     y_val = [tagToInt(y) for y in y_val]     # to_categorical() keras method
     y_test = [tagToInt(y) for y in y_test]
 
-    # convert class vectors to binary class matrices
+    # convert class vectors to binary class matrices (one-hot encoding)
     y_train = to_categorical(y_train, n_classes)
     y_val = to_categorical(y_val, n_classes)
     y_test = to_categorical(y_test, n_classes)
@@ -68,7 +58,6 @@ def preprocess_data(train_data, val_data, test_data, w2v_model, n_classes):
 
 
 class DataSet(object):
-    # _MAX_FAKE_SENTENCE_LEN = 50
 
     def __init__(self, instances, labels, fake_data=False):
         if fake_data:
@@ -134,40 +123,35 @@ class SemiDataSet(object):
     def __init__(self, instances, labels, n_labeled, n_classes):
         self.n_labeled = n_labeled
 
-        # # Unlabled DataSet
-        # self.unlabeled_ds = DataSet(instances, []) # DUDA: estas dos lineas deberia cambiar para
-        #                                            # el experimento 3 (datos no anotados sean disjuntos
-        #                                            # a los no anotados)?
-        # self.num_examples = self.unlabeled_ds.num_examples
-
-        # # Labeled DataSet
-        # indices = np.arange(self.num_examples)
-        # shuffled_indices = np.random.permutation(indices)
-        # instances = instances[shuffled_indices]
-        # labels = labels[shuffled_indices]
-        # y = np.array([np.arange(n_classes)[lbl == 1][0] for lbl in labels])
-        # n_from_each_class = n_labeled // n_classes
-        # i_labeled = []
-        # for c in range(n_classes):
-        #     i = indices[y == c][:n_from_each_class]
-        #     i_labeled += list(i)
-        # l_instances = instances[i_labeled]
-        # l_labels = labels[i_labeled]
-        # self.labeled_ds = DataSet(l_instances, l_labels)
-
-
-        ##### Experimento 3 ##### (descomentar lo siguiente solo si se quiere excluir que
-                                 # los datos anotados se utilicen como anotados)
         # Unlabled DataSet
-        self.unlabeled_ds = DataSet(instances[n_labeled:], [])
-        self.num_examples = instances.shape[0] # self.unlabeled_ds.num_examples 
+        self.unlabeled_ds = DataSet(instances, [])
+        self.num_examples = self.unlabeled_ds.num_examples
 
         # Labeled DataSet
-        l_instances = instances[0:n_labeled]
-        l_labels = labels[0:n_labeled]
-        self.labeled_ds = DataSet(l_instances, l_labels)       
+        indices = np.arange(self.num_examples)
+        shuffled_indices = np.random.permutation(indices)
+        instances = instances[shuffled_indices]
+        labels = labels[shuffled_indices]
+        y = np.array([np.arange(n_classes)[lbl == 1][0] for lbl in labels])
+        n_from_each_class = n_labeled // n_classes
+        i_labeled = []
+        for c in range(n_classes):
+            i = indices[y == c][:n_from_each_class]
+            i_labeled += list(i)
+        l_instances = instances[i_labeled]
+        l_labels = labels[i_labeled]
+        self.labeled_ds = DataSet(l_instances, l_labels)
 
+        # Experimento 3 ##### (descomentar lo siguiente solo si se quiere excluir que
+        # los datos anotados se utilicen como anotados)
+        # # Unlabled DataSet
+        # self.unlabeled_ds = DataSet(instances[n_labeled:], [])
+        # self.num_examples = instances.shape[0]  # self.unlabeled_ds.num_examples
 
+        # # Labeled DataSet
+        # l_instances = instances[0:n_labeled]
+        # l_labels = labels[0:n_labeled]
+        # self.labeled_ds = DataSet(l_instances, l_labels)
 
     def next_batch(self, batch_size):
         unlabeled_instances, _ = self.unlabeled_ds.next_batch(batch_size)
@@ -191,7 +175,7 @@ def read_data_sets(data_path, n_classes, n_labeled=100, fake_data=False, maxlen=
         return data_sets
 
     print('Loading dataset...')
-    train_data = pd.read_csv('%swords_entity_W_2_cnn_train_exp_3.csv' % data_path)
+    train_data = pd.read_csv('%swords_entity_W_2_cnn_train_exp_2.csv' % data_path)
     val_data = pd.read_csv('%swords_entity_W_2_cnn_dev.csv' % data_path)
     test_data = pd.read_csv('%swords_entity_W_2_cnn_test.csv' % data_path)
 
@@ -202,20 +186,8 @@ def read_data_sets(data_path, n_classes, n_labeled=100, fake_data=False, maxlen=
     X_train, X_val, X_test, y_train, y_val, y_test = preprocess_data(train_data, val_data,
                                                                      test_data, w2v_model, n_classes)
 
-    # train_data = np.load("%s/train.pkl" % data_path)
-    # train_instances = sequence.pad_sequences(train_data["x"], maxlen)
-    # train_labels = dense_to_one_hot(train_data["y"], n_classes)
-    # data_sets.train = SemiDataSet(train_instances, train_labels, n_labeled, n_classes)
     data_sets.train = SemiDataSet(X_train, y_train, n_labeled, n_classes)
-
-    # validation_data = np.load("%s/validation.pkl" % data_path)
-    # validation_instances = sequence.pad_sequences(validation_data["x"], maxlen)
-    # validation_labels = dense_to_one_hot(validation_data["y"], n_classes)
     data_sets.validation = DataSet(X_val, y_val)
-
-    # test_data = np.load("%s/test.pkl" % data_path)
-    # test_instances = sequence.pad_sequences(test_data["x"], maxlen)
-    # test_labels = dense_to_one_hot(test_data["y"], n_classes)
     data_sets.test = DataSet(X_test, y_test)
 
     return data_sets, w2v_model

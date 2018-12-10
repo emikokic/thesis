@@ -5,7 +5,7 @@
 from __future__ import absolute_import, print_function, unicode_literals
 
 import argparse
-import cnn_input_data
+import input_data_cnn_wide_ladder
 import json
 import numpy as np
 import os
@@ -66,17 +66,6 @@ def main(data_path, results_file, config):
 
     place = tf.placeholder(tf.float32, shape=(vocab_size, embeddings_size))
     set_embeddings_weights = embeddings_weights.assign(place)
-
-    # TODO: probar alternativa implementada por Cristian
-    # Loading
-    # print('Loading word2vec model...')
-    # w2v_model = KeyedVectors.load('/home/ekokic/thesis/models/google/word2vecGoogle.model')
-    # embeddings_weights = w2v_model.vectors
-    # ## embeddings_weights = np.load(config["embeddings"])["embeddings"]
-    # embeddings_weights = tf.get_variable("embeddings",
-    #                                      embeddings_weights.shape,
-    #                                      initializer=tf.constant_initializer(embeddings_weights),
-    #                                      trainable=config.get("train_embeddings", False))
 
     FFI_embeddings = tf.expand_dims(
         tf.nn.embedding_lookup(embeddings_weights, FFI),
@@ -377,7 +366,7 @@ def main(data_path, results_file, config):
     # Training
     ####################################################################################
     print("===  Loading Data ===", file=sys.stderr)
-    data, w2v_model = cnn_input_data.read_data_sets(data_path,
+    data, w2v_model = input_data_cnn_wide_ladder.read_data_sets(data_path,
                                                     n_classes=config['num_classes'],
                                                     n_labeled=config['num_labeled'],
                                                     maxlen=max_sentence_len)
@@ -398,7 +387,7 @@ def main(data_path, results_file, config):
 
     if not os.path.exists(results_file):
         results_log = open(results_file, "w")
-        print("experiment,split,epoch,accuracy,lloss,true,pred", file=results_log)
+        print("experiment,split,epoch,accuracy,tloss,lloss,true,pred", file=results_log)
 
     else:
         results_log = open(results_file, "a")
@@ -406,7 +395,7 @@ def main(data_path, results_file, config):
     init = tf.global_variables_initializer()
     sess.run(init)
 
-    print('=== Initializing embeddings with pre-trained weights ===')  # DUDA: es correcto?
+    print('=== Initializing embeddings with pre-trained weights ===')
     sess.run(set_embeddings_weights, feed_dict={place: w2v_model.syn0})  #.vectors})
 
     print("=== Training Start ===", file=sys.stderr)
@@ -414,7 +403,7 @@ def main(data_path, results_file, config):
     for i in tr:
         labeled_instances, labels, unlabeled_instances = data.train.next_batch(batch_size)
 
-        _, tloss, lloss = sess.run([train_step, loss, clean_pred_cost],
+        _, tloss, lloss = sess.run([train_step, loss, corr_pred_cost], # DUDA: clean o corr loss?
                                    feed_dict={feedforward_inputs: labeled_instances,
                                               outputs: labels,
                                               autoencoder_inputs: unlabeled_instances,
@@ -435,23 +424,25 @@ def main(data_path, results_file, config):
             for start in trange(0, len(training_labels), batch_size):
                 end = min(start + batch_size, len(training_labels))
                 epoch_stats = sess.run(
-                    [accuracy, clean_pred_cost, predictions],
+                    [accuracy, loss, corr_pred_cost, predictions], # DUDA: clean_pred_cost o corr_pred_cost?
                     feed_dict={feedforward_inputs: training_instances[start:end],
                                outputs: training_labels[start:end],
+                               autoencoder_inputs: unlabeled_instances,
                                training: False})
 
                 mean_accuracy.append(epoch_stats[0])
-                mean_loss.append(epoch_stats[1])
+                mean_loss.append(epoch_stats[2])
 
                 true_labels = np.argmax(training_labels[start:end], 1)
                 for i in np.arange(true_labels.shape[0]):
-                    print("%s,training,%d,%.3g,%.3g,%d,%d" %
+                    print("%s,training,%d,%.3g,%.3g,%.3g,%d,%d" %
                           (config["experiment_id"],
                            epoch_n,
                            epoch_stats[0],
                            epoch_stats[1],
+                           epoch_stats[2],
                            true_labels[i],
-                           epoch_stats[2][i]), file=results_log)
+                           epoch_stats[3][i]), file=results_log)
 
             tqdm.write("Epoch %d: Accuracy for Training Data: %.3g" %
                        (epoch_n, np.mean(mean_accuracy)), file=sys.stderr)
@@ -467,23 +458,25 @@ def main(data_path, results_file, config):
             for start in trange(0, len(validation_labels), batch_size):
                 end = min(start + batch_size, len(validation_labels))
                 epoch_stats = sess.run(
-                    [accuracy, clean_pred_cost, predictions],
+                    [accuracy, loss, corr_pred_cost, predictions],
                     feed_dict={feedforward_inputs: validation_instances[start:end],
                                outputs: validation_labels[start:end],
+                               autoencoder_inputs: unlabeled_instances,
                                training: False})
 
                 mean_accuracy.append(epoch_stats[0])
-                mean_loss.append(epoch_stats[1])
+                mean_loss.append(epoch_stats[2])
 
                 true_labels = np.argmax(validation_labels[start:end], 1)
                 for i in np.arange(true_labels.shape[0]):
-                    print("%s,validation,%d,%.3g,%.3g,%d,%d" %
+                    print("%s,validation,%d,%.3g,%.3g,%.3g,%d,%d" %
                           (config["experiment_id"],
                            epoch_n,
                            epoch_stats[0],
                            epoch_stats[1],
+                           epoch_stats[2],
                            true_labels[i],
-                           epoch_stats[2][i]), file=results_log)
+                           epoch_stats[3][i]), file=results_log)
 
             tqdm.write("Epoch %d: Accuracy for Validation Data: %.3g" %
                        (epoch_n, np.mean(mean_accuracy)), file=sys.stderr)
@@ -511,23 +504,25 @@ def main(data_path, results_file, config):
     for start in trange(0, len(training_labels), batch_size):
         end = min(start + batch_size, len(training_labels))
         final_stats = sess.run(
-            [accuracy, clean_pred_cost, predictions],
+            [accuracy, loss, corr_pred_cost, predictions],
             feed_dict={feedforward_inputs: training_instances[start:end],
                        outputs: training_labels[start:end],
+                       autoencoder_inputs: unlabeled_instances,
                        training: False})
 
         mean_accuracy.append(final_stats[0])
-        mean_loss.append(final_stats[1])
+        mean_loss.append(final_stats[2])
 
         true_labels = np.argmax(training_labels[start:end], 1)
         for i in np.arange(true_labels.shape[0]):
-            print("%s,training,%d,%.3g,%.3g,%d,%d" %
+            print("%s,training,%d,%.3g,%.3g,%.3g,%d,%d" %
                   (config["experiment_id"],
                    epoch_n,
                    final_stats[0],
                    final_stats[1],
+                   final_stats[2],
                    true_labels[i],
-                   final_stats[2][i]), file=results_log)
+                   final_stats[3][i]), file=results_log)
 
     print("Final Accuracy for Training Data: %.3g" % np.mean(mean_accuracy), file=sys.stderr)
     print("Final Supervised Cost for Training Data: %.3g" % np.mean(mean_loss), file=sys.stderr)
@@ -541,22 +536,24 @@ def main(data_path, results_file, config):
     for start in trange(0, len(validation_labels), batch_size):
         end = min(start + batch_size, len(validation_labels))
         final_stats = sess.run(
-            [accuracy, clean_pred_cost, predictions],
+            [accuracy, loss, corr_pred_cost, predictions],
             feed_dict={feedforward_inputs: validation_instances[start:end],
                        outputs: validation_labels[start:end],
+                       autoencoder_inputs: unlabeled_instances,
                        training: False})
         mean_accuracy.append(final_stats[0])
-        mean_loss.append(final_stats[1])
+        mean_loss.append(final_stats[2])
 
         true_labels = np.argmax(validation_labels[start:end], 1)
         for i in np.arange(true_labels.shape[0]):
-            print("%s,validation,%d,%.3g,%.3g,%d,%d" %
+            print("%s,validation,%d,%.3g,%.3g,%.3g,%d,%d" %
                   (config["experiment_id"],
                    epoch_n,
                    final_stats[0],
                    final_stats[1],
+                   final_stats[2],
                    true_labels[i],
-                   final_stats[2][i]), file=results_log)
+                   final_stats[3][i]), file=results_log)
 
     print("Final Accuracy for Validation Data: %.3g" % np.mean(mean_accuracy), file=sys.stderr)
     print("Final Supervised Cost for Validation Data: %.3g" % np.mean(mean_loss), file=sys.stderr)
@@ -569,20 +566,22 @@ def main(data_path, results_file, config):
     for start in trange(0, len(test_labels), batch_size):
         end = min(start + batch_size, len(test_labels))
         final_stats = sess.run(
-            [accuracy, clean_pred_cost, predictions],
+            [accuracy, loss, corr_pred_cost, predictions],
             feed_dict={feedforward_inputs: test_instances[start:end],
                        outputs: test_labels[start:end],
+                       autoencoder_inputs: unlabeled_instances,
                        training: False})
 
         true_labels = np.argmax(test_labels[start:end], 1)
         for i in np.arange(true_labels.shape[0]):
-            print("%s,test,%d,%.3g,%.3g,%d,%d" %
+            print("%s,test,%d,%.3g,%.3g,%.3g,%d,%d" %
                   (config["experiment_id"],
                    epoch_n,
                    final_stats[0],
                    final_stats[1],
+                   final_stats[2],
                    true_labels[i],
-                   final_stats[2][i]), file=results_log)
+                   final_stats[3][i]), file=results_log)
 
     print("=== Experiment finished ===", file=sys.stderr)
     sess.close()
