@@ -25,7 +25,7 @@ def main(data_path, results_file, config):
 
     conv_kernels = config['conv_kernels']
     conv_filters = config['conv_filters']
-    num_classes = config["num_classes"]
+    num_classes = config['num_classes']
 
     tf.reset_default_graph()  # Clear the tensorflow graph (free reserved memory)
 
@@ -200,6 +200,12 @@ def main(data_path, results_file, config):
             W = tf.get_variable("W", (total_conv_features, num_classes),
                                 initializer=tf.random_normal_initializer())
             weight_variables.append(W)
+
+
+            print('h shape', h.shape)
+            print('W shape', W.shape)
+
+
             z_pre = tf.matmul(h, W, name="z_pre")
             h = encoder_layer(z_pre, noise_std,  # update_BN=update_BN,
                               activation=tf.nn.softmax)
