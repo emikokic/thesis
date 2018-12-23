@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import ast
 from keras.utils import to_categorical
+from keras.preprocessing.sequence import pad_sequences
 from gensim.models import KeyedVectors
 
 
@@ -50,7 +51,7 @@ def preprocess_data(train_data, val_data, test_data, w2v_model, maxlen, num_clas
     X_val = transform_input(X_val, w2v_model.vocab, maxlen)
     X_test = transform_input(X_test, w2v_model.vocab, maxlen)
 
-    # convert class vectors to binary class matrices
+    # # convert class vectors to binary class matrices
     # y_train = np.array([to_categorical(labels, num_classes) for labels in y_train])
     # y_val = np.array([to_categorical(labels, num_classes) for labels in y_val])
     # y_test = np.array([to_categorical(labels, num_classes) for labels in y_test])
@@ -58,13 +59,13 @@ def preprocess_data(train_data, val_data, test_data, w2v_model, maxlen, num_clas
     # padding target labels
     y_train = pad_sequences(y_train, maxlen=maxlen,  # [0,0,0,0,1] one-hot encoding for 'O' label
                             # value=np.array([0, 0, 0, 0, 1], dtype='float32'))
-                            value=4) # 'O' tag representation
+                            value=4)  # 'O' tag representation
     y_val = pad_sequences(y_val, maxlen=maxlen,  # [0,0,0,0,1] one-hot encoding for 'O' label
                           # value=np.array([0, 0, 0, 0, 1], dtype='float32'))
-                          value=4) # 'O' tag representation
+                          value=4)  # 'O' tag representation
     y_test = pad_sequences(y_test, maxlen=maxlen,  # [0,0,0,0,1] one-hot encoding for 'O' label
                            # value=np.array([0, 0, 0, 0, 1], dtype='float32'))
-                           value=4) # 'O' tag representation
+                           value=4)  # 'O' tag representation
 
     return X_train, X_val, X_test, y_train, y_val, y_test
 
@@ -131,19 +132,19 @@ class SemiDataSet(object):
         self.num_examples = self.unlabeled_ds.num_examples
 
         # Labeled DataSet
-        indices = np.arange(self.num_examples)
-        shuffled_indices = np.random.permutation(indices)
-        instances = instances[shuffled_indices]
-        labels = labels[shuffled_indices]
-        y = np.array([np.arange(n_classes)[lbl == 1][0] for lbl in labels])
-        n_from_each_class = n_labeled // n_classes
-        i_labeled = []
-        for c in range(n_classes):
-            i = indices[y == c][:n_from_each_class]
-            i_labeled += list(i)
-        l_instances = instances[i_labeled]
-        l_labels = labels[i_labeled]
-        self.labeled_ds = DataSet(l_instances, l_labels)
+        # indices = np.arange(self.num_examples)
+        # shuffled_indices = np.random.permutation(indices)
+        # instances = instances[shuffled_indices]
+        # labels = labels[shuffled_indices]
+        # y = np.array([np.arange(n_classes)[lbl == 1][0] for lbl in labels])
+        # n_from_each_class = n_labeled // n_classes
+        # i_labeled = []
+        # for c in range(n_classes):
+        #     i = indices[y == c][:n_from_each_class]
+        #     i_labeled += list(i)
+        # l_instances = instances[i_labeled]
+        # l_labels = labels[i_labeled]
+        # self.labeled_ds = DataSet(l_instances, l_labels)
 
         # Experimento 3 ##### (descomentar lo siguiente solo si se quiere excluir que
         # los datos anotados se utilicen como anotados)
@@ -151,10 +152,10 @@ class SemiDataSet(object):
         # self.unlabeled_ds = DataSet(instances[n_labeled:], [])
         # self.num_examples = instances.shape[0]  # self.unlabeled_ds.num_examples
 
-        # # Labeled DataSet
-        # l_instances = instances[0:n_labeled]
-        # l_labels = labels[0:n_labeled]
-        # self.labeled_ds = DataSet(l_instances, l_labels)
+        # Labeled DataSet
+        l_instances = instances[0:n_labeled]
+        l_labels = labels[0:n_labeled]
+        self.labeled_ds = DataSet(l_instances, l_labels)
 
     def next_batch(self, batch_size):
         unlabeled_instances, _ = self.unlabeled_ds.next_batch(batch_size)
@@ -182,6 +183,11 @@ def read_data_sets(data_path, n_classes, n_labeled=100, maxlen=None):
     print('Preprocessing input data...')
     X_train, X_val, X_test, y_train, y_val, y_test = preprocess_data(train_data, val_data, test_data,
                                                                      w2v_model, maxlen, n_classes)
+
+    print('X_train shape', X_train.shape)
+    print('y_train shape', y_train.shape)
+    print('n_labeled', n_labeled)
+    print('n_classes', n_classes)
 
     data_sets.train = SemiDataSet(X_train, y_train, n_labeled, n_classes)
     data_sets.validation = DataSet(X_val, y_val)

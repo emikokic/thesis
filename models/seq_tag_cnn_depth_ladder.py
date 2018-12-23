@@ -47,7 +47,7 @@ def main(data_path, results_file, config):
                                         name="AEI")
     print('SHAPE autoencoder_inputs', autoencoder_inputs.shape)
 
-    outputs = tf.placeholder(tf.int32)#(tf.float32)  # target
+    outputs = tf.placeholder(tf.int64)#(tf.float32)  # target
     training = tf.placeholder(tf.bool)  # training or evaluation
 
     # Not quite sure what is this for
@@ -191,15 +191,17 @@ def main(data_path, results_file, config):
                                    activation=None) # softmax activation is computed together with the loss.
             print('-------------- logits shape:', h.get_shape().as_list())
 
-            h = tf.reshape(logits, [-1, max_seq_len, num_classes])
+            
+            h = tf.reshape(logits, [-1, max_seq_len, num_classes]) #TOCHECK
+            # h = tf.reshape(logits, [-1, max_seq_len])
+
             
             print('-------------- y shape', h.shape)
             # h = tf.squeeze(h, axis=1)
             # print('h shape', h.shape) 
             # print('W shape', W.shape)
             # z_pre = tf.matmul(h, W, name="z_pre")
-            # h = encoder_layer(z_pre, noise_std,  # update_BN=update_BN,
-            #                   activation=tf.nn.softmax)
+            # h = encoder_layer(z_pre, noise_std, activation=tf.nn.softmax)
         y = tf.identity(h, name="y")
         return y, weight_variables, logits
 
@@ -301,7 +303,7 @@ def main(data_path, results_file, config):
 
     deconv_layers = []
     
-    for i in range(conv_layers - 1, 0, -1):
+    for i in range(conv_layers - 1, -1, -1):
         ksize = 2
         with tf.variable_scope("decoder_bloc_" + str(i), reuse=tf.AUTO_REUSE):
 
@@ -320,15 +322,30 @@ def main(data_path, results_file, config):
             z_est_BN = tf.identity(z_est_BN, name="z_est_BN")
 
             # run deconvolutional (transposed convolution) layer
-            V = tf.get_variable("V",
-                                (ksize, 1, conv_filters, conv_filters),
-                                initializer=tf.truncated_normal_initializer())
-            print('-------------- z_est shape', z_est.shape)
-            print('-------------- V shape', V.shape)
-            u = tf.nn.conv2d_transpose(z_est, V,
-                       # output_shape=tf.shape(AEI_embeddings),
-                       output_shape=tf.shape(z_corr), # TODO: check this
-                       strides=[1, 1, 1, 1], padding='SAME')
+            if (i == 0):
+                V = tf.get_variable("V",
+                                    (ksize, 1, embeddings_size, conv_filters),
+                                    initializer=tf.truncated_normal_initializer())
+
+                print('-------------- z_est shape', z_est.shape)
+                print('-------------- V shape', V.shape)
+                print('AEI_embeddings shape', AEI_embeddings.shape)
+
+                u = tf.nn.conv2d_transpose(z_est, V,
+                           output_shape=tf.shape(AEI_embeddings),
+                           strides=[1, 1, 1, 1], padding='SAME')
+            else:
+
+                V = tf.get_variable("V",
+                                    (ksize, 1, conv_filters, conv_filters),
+                                    initializer=tf.truncated_normal_initializer())
+                print('-------------- z_est shape', z_est.shape)
+                print('-------------- V shape', V.shape)
+                u = tf.nn.conv2d_transpose(z_est, V,
+                           # output_shape=tf.shape(AEI_embeddings),
+                           output_shape=tf.shape(z_corr), # TODO: check this
+                           strides=[1, 1, 1, 1], padding='SAME')
+
 
             l2_reg += tf.nn.l2_loss(V)
 
@@ -340,23 +357,18 @@ def main(data_path, results_file, config):
     with tf.variable_scope("decoder_bloc_0", reuse=tf.AUTO_REUSE):
         z_corr = tf.get_default_graph().get_tensor_by_name("AE_corrupted/h0:0")
         z = tf.get_default_graph().get_tensor_by_name("AE_clean/h0:0")
-        print('deconv_layer:', 0)
+        mean, var = tf.constant(0.0), tf.constant(1.0)
+
+        # u, z_est_BN = decoder_bloc(u, z_corr, mean, var)
+
         print('-------------- z_corr shape', z_corr.shape)
         print('-------------- u shape', u.shape)
         z_est = g_gauss(z_corr, u)
-        V = tf.get_variable("V",
-                            (ksize, 1, conv_filters, embeddings_size),
-                            initializer=tf.truncated_normal_initializer())
 
-        print('-------------- z_est shape', z_est.shape)
-        print('-------------- V shape', V.shape)
-        print('AEI_embeddings shape', AEI_embeddings.shape)
+        z_est_BN = (z_est - mean) / tf.sqrt(var + tf.constant(1e-10))
+        z_est_BN = tf.identity(z_est_BN, name="z_est_BN")
 
-        u = tf.nn.conv2d_transpose(z_est, V,
-                   output_shape=tf.shape(AEI_embeddings),
-                   strides=[1, 1, 1, 1], padding='SAME')
-
-        d_cost.append((tf.reduce_mean(tf.square(z_est - z))) * denoising_cost[0])
+        d_cost.append((tf.reduce_mean(tf.square(z_est_BN - z))) * denoising_cost[0])
 
     ####################################################################################
     # Loss, accuracy and optimization
@@ -371,8 +383,12 @@ def main(data_path, results_file, config):
 
     loss = corr_pred_cost + u_cost + config.get("lambda", 0.0) * l2_reg  # total cost
 
-    predictions = tf.argmax(FF_y, 1)
-    correct_prediction = tf.equal(predictions, tf.argmax(outputs, 1))
+    predictions = tf.argmax(FF_y, 2) #TOCHECK
+    # predictions = FF_y
+    print('predictions shape', predictions.shape)
+    print('outputs shape', outputs.shape)
+    # correct_prediction = tf.equal(predictions, tf.argmax(outputs, 1)) TOCHECK
+    correct_prediction = tf.equal(predictions, outputs)#tf.cast(outputs, "float"))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
 
     # Optimization setting
@@ -459,16 +475,19 @@ def main(data_path, results_file, config):
                 mean_accuracy.append(epoch_stats[0])
                 mean_loss.append(epoch_stats[2])
 
-                true_labels = np.argmax(training_labels[start:end], 1)
+                # true_labels = np.argmax(training_labels[start:end], 1)
+                true_labels = training_labels[start:end]
+
                 for i in np.arange(true_labels.shape[0]):
-                    print("%s,training,%d,%.3g,%.3g,%.3g,%d,%d" %
+                    print("%s,training,%d,%.3g,%.3g,%.3g,%s,%s" %
                           (config["experiment_id"],
                            epoch_n,
                            epoch_stats[0],
                            epoch_stats[1],
                            epoch_stats[2],
-                           true_labels[i],
-                           epoch_stats[3][i]), file=results_log)
+                           np.array2string(true_labels[i]),
+                           np.array2string(epoch_stats[3][i])),
+                           file=results_log)
 
             tqdm.write("Epoch %d: Accuracy for Training Data: %.3g" %
                        (epoch_n, np.mean(mean_accuracy)), file=sys.stderr)
@@ -493,16 +512,18 @@ def main(data_path, results_file, config):
                 mean_accuracy.append(epoch_stats[0])
                 mean_loss.append(epoch_stats[2])
 
-                true_labels = np.argmax(validation_labels[start:end], 1)
+                # true_labels = np.argmax(training_labels[start:end], 1)
+                true_labels = training_labels[start:end]
                 for i in np.arange(true_labels.shape[0]):
-                    print("%s,validation,%d,%.3g,%.3g,%.3g,%d,%d" %
+                    print("%s,training,%d,%.3g,%.3g,%.3g,%s,%s" %
                           (config["experiment_id"],
                            epoch_n,
                            epoch_stats[0],
                            epoch_stats[1],
                            epoch_stats[2],
-                           true_labels[i],
-                           epoch_stats[3][i]), file=results_log)
+                           np.array2string(true_labels[i]),
+                           np.array2string(epoch_stats[3][i])),
+                           file=results_log)
 
             tqdm.write("Epoch %d: Accuracy for Validation Data: %.3g" %
                        (epoch_n, np.mean(mean_accuracy)), file=sys.stderr)
@@ -539,16 +560,18 @@ def main(data_path, results_file, config):
         mean_accuracy.append(final_stats[0])
         mean_loss.append(final_stats[2])
 
-        true_labels = np.argmax(training_labels[start:end], 1)
+        # true_labels = np.argmax(training_labels[start:end], 1)
+        true_labels = training_labels[start:end]
         for i in np.arange(true_labels.shape[0]):
-            print("%s,training,%d,%.3g,%.3g,%.3g,%d,%d" %
+            print("%s,training,%d,%.3g,%.3g,%.3g,%s,%s" %
                   (config["experiment_id"],
                    epoch_n,
-                   final_stats[0],
-                   final_stats[1],
-                   final_stats[2],
-                   true_labels[i],
-                   final_stats[3][i]), file=results_log)
+                   epoch_stats[0],
+                   epoch_stats[1],
+                   epoch_stats[2],
+                   np.array2string(true_labels[i]),
+                   np.array2string(epoch_stats[3][i])),
+                   file=results_log)
 
     print("Final Accuracy for Training Data: %.3g" % np.mean(mean_accuracy), file=sys.stderr)
     print("Final Supervised Cost for Training Data: %.3g" % np.mean(mean_loss), file=sys.stderr)
@@ -570,16 +593,18 @@ def main(data_path, results_file, config):
         mean_accuracy.append(final_stats[0])
         mean_loss.append(final_stats[2])
 
-        true_labels = np.argmax(validation_labels[start:end], 1)
+        # true_labels = np.argmax(training_labels[start:end], 1)
+        true_labels = training_labels[start:end]
         for i in np.arange(true_labels.shape[0]):
-            print("%s,validation,%d,%.3g,%.3g,%.3g,%d,%d" %
+            print("%s,training,%d,%.3g,%.3g,%.3g,%s,%s" %
                   (config["experiment_id"],
                    epoch_n,
-                   final_stats[0],
-                   final_stats[1],
-                   final_stats[2],
-                   true_labels[i],
-                   final_stats[3][i]), file=results_log)
+                   epoch_stats[0],
+                   epoch_stats[1],
+                   epoch_stats[2],
+                   np.array2string(true_labels[i]),
+                   np.array2string(epoch_stats[3][i])),
+                   file=results_log)
 
     print("Final Accuracy for Validation Data: %.3g" % np.mean(mean_accuracy), file=sys.stderr)
     print("Final Supervised Cost for Validation Data: %.3g" % np.mean(mean_loss), file=sys.stderr)
@@ -598,16 +623,18 @@ def main(data_path, results_file, config):
                        autoencoder_inputs: unlabeled_instances,
                        training: False})
 
-        true_labels = np.argmax(test_labels[start:end], 1)
+        # true_labels = np.argmax(training_labels[start:end], 1)
+        true_labels = training_labels[start:end]
         for i in np.arange(true_labels.shape[0]):
-            print("%s,test,%d,%.3g,%.3g,%.3g,%d,%d" %
+            print("%s,training,%d,%.3g,%.3g,%.3g,%s,%s" %
                   (config["experiment_id"],
                    epoch_n,
-                   final_stats[0],
-                   final_stats[1],
-                   final_stats[2],
-                   true_labels[i],
-                   final_stats[3][i]), file=results_log)
+                   epoch_stats[0],
+                   epoch_stats[1],
+                   epoch_stats[2],
+                   np.array2string(true_labels[i]),
+                   np.array2string(epoch_stats[3][i])),
+                   file=results_log)
 
     print("=== Experiment finished ===", file=sys.stderr)
     sess.close()
