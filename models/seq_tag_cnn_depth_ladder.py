@@ -1,6 +1,6 @@
 
 # -*- coding: utf-8 -*-
-# Author: Cristian Cardellino
+# Authors: Cristian Cardellino & Emiliano Kokic
 
 from __future__ import absolute_import, print_function, unicode_literals
 
@@ -512,10 +512,10 @@ def main(data_path, results_file, config):
                 mean_accuracy.append(epoch_stats[0])
                 mean_loss.append(epoch_stats[2])
 
-                # true_labels = np.argmax(training_labels[start:end], 1)
-                true_labels = training_labels[start:end]
+                
+                true_labels = validation_labels[start:end]
                 for i in np.arange(true_labels.shape[0]):
-                    print("%s,training,%d,%.3g,%.3g,%.3g,%s,%s" %
+                    print("%s,validation,%d,%.3g,%.3g,%.3g,%s,%s" %
                           (config["experiment_id"],
                            epoch_n,
                            epoch_stats[0],
@@ -566,11 +566,11 @@ def main(data_path, results_file, config):
             print("%s,training,%d,%.3g,%.3g,%.3g,%s,%s" %
                   (config["experiment_id"],
                    epoch_n,
-                   epoch_stats[0],
-                   epoch_stats[1],
-                   epoch_stats[2],
+                   final_stats[0],
+                   final_stats[1],
+                   final_stats[2],
                    np.array2string(true_labels[i]),
-                   np.array2string(epoch_stats[3][i])),
+                   np.array2string(final_stats[3][i])),
                    file=results_log)
 
     print("Final Accuracy for Training Data: %.3g" % np.mean(mean_accuracy), file=sys.stderr)
@@ -593,17 +593,17 @@ def main(data_path, results_file, config):
         mean_accuracy.append(final_stats[0])
         mean_loss.append(final_stats[2])
 
-        # true_labels = np.argmax(training_labels[start:end], 1)
-        true_labels = training_labels[start:end]
+        # true_labels = np.argmax(validation_labels[start:end], 1)
+        true_labels = validation_labels[start:end]
         for i in np.arange(true_labels.shape[0]):
-            print("%s,training,%d,%.3g,%.3g,%.3g,%s,%s" %
+            print("%s,validation,%d,%.3g,%.3g,%.3g,%s,%s" %
                   (config["experiment_id"],
                    epoch_n,
-                   epoch_stats[0],
-                   epoch_stats[1],
-                   epoch_stats[2],
+                   final_stats[0],
+                   final_stats[1],
+                   final_stats[2],
                    np.array2string(true_labels[i]),
-                   np.array2string(epoch_stats[3][i])),
+                   np.array2string(final_stats[3][i])),
                    file=results_log)
 
     print("Final Accuracy for Validation Data: %.3g" % np.mean(mean_accuracy), file=sys.stderr)
@@ -623,17 +623,16 @@ def main(data_path, results_file, config):
                        autoencoder_inputs: unlabeled_instances,
                        training: False})
 
-        # true_labels = np.argmax(training_labels[start:end], 1)
-        true_labels = training_labels[start:end]
+        true_labels = test_labels[start:end]
         for i in np.arange(true_labels.shape[0]):
-            print("%s,training,%d,%.3g,%.3g,%.3g,%s,%s" %
+            print("%s,test,%d,%.3g,%.3g,%.3g,%s,%s" %
                   (config["experiment_id"],
                    epoch_n,
-                   epoch_stats[0],
-                   epoch_stats[1],
-                   epoch_stats[2],
+                   final_stats[0],
+                   final_stats[1],
+                   final_stats[2],
                    np.array2string(true_labels[i]),
-                   np.array2string(epoch_stats[3][i])),
+                   np.array2string(final_stats[3][i])),
                    file=results_log)
 
     print("=== Experiment finished ===", file=sys.stderr)
