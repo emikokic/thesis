@@ -179,7 +179,7 @@ if __name__ == '__main__':
 
     print('Training model...')
     args = list(vars(args).items())
-    experiment_name = 'seq_tag_cnn_depth_supervised'
+    experiment_name = 'seq_tag_cnn_depth_supervised_preds'
     for key, value in args:
         experiment_name += ('_' + str(key) + '_' + str(value))
     if not os.path.exists('experiments' + '/' + experiment_name):
@@ -203,6 +203,9 @@ if __name__ == '__main__':
                         verbose=1,
                         validation_data=(X_val, y_val),
                         callbacks=callbacks)
+
+    print('Saving model...')
+    model.save(os.path.join('experiments', experiment_name, 'model'))
 
     # print('Saving model predictions...')
     # predictions = model.predict(X_train)

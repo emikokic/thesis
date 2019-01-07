@@ -416,6 +416,11 @@ def main(data_path, results_file, config):
 
     batch_size = config['batch_size']
     num_epochs = config['num_epochs']
+    exp_name = '_'.join([config['experiment_id'], 
+                         'conv_layers', str(config['conv_layers']),
+                         'conv_filters', str(config['conv_filters']),
+                         'conv_kernels', str(config['conv_kernels']),
+                         'lambda', str(config['lambda'])])
 
     num_iter = (num_examples // batch_size) * num_epochs  # number of loop iterations
 
@@ -480,7 +485,7 @@ def main(data_path, results_file, config):
 
                 for i in np.arange(true_labels.shape[0]):
                     print("%s,training,%d,%.3g,%.3g,%.3g,%s,%s" %
-                          (config["experiment_id"],
+                          (exp_name,
                            epoch_n,
                            epoch_stats[0],
                            epoch_stats[1],
@@ -516,7 +521,7 @@ def main(data_path, results_file, config):
                 true_labels = validation_labels[start:end]
                 for i in np.arange(true_labels.shape[0]):
                     print("%s,validation,%d,%.3g,%.3g,%.3g,%s,%s" %
-                          (config["experiment_id"],
+                          (exp_name,
                            epoch_n,
                            epoch_stats[0],
                            epoch_stats[1],
@@ -564,7 +569,7 @@ def main(data_path, results_file, config):
         true_labels = training_labels[start:end]
         for i in np.arange(true_labels.shape[0]):
             print("%s,training,%d,%.3g,%.3g,%.3g,%s,%s" %
-                  (config["experiment_id"],
+                  (exp_name,
                    epoch_n,
                    final_stats[0],
                    final_stats[1],
@@ -597,7 +602,7 @@ def main(data_path, results_file, config):
         true_labels = validation_labels[start:end]
         for i in np.arange(true_labels.shape[0]):
             print("%s,validation,%d,%.3g,%.3g,%.3g,%s,%s" %
-                  (config["experiment_id"],
+                  (exp_name,
                    epoch_n,
                    final_stats[0],
                    final_stats[1],
@@ -626,7 +631,7 @@ def main(data_path, results_file, config):
         true_labels = test_labels[start:end]
         for i in np.arange(true_labels.shape[0]):
             print("%s,test,%d,%.3g,%.3g,%.3g,%s,%s" %
-                  (config["experiment_id"],
+                  (exp_name,
                    epoch_n,
                    final_stats[0],
                    final_stats[1],
