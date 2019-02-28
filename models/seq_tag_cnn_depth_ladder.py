@@ -47,7 +47,7 @@ def main(data_path, results_file, config):
                                         name="AEI")
     print('SHAPE autoencoder_inputs', autoencoder_inputs.shape)
 
-    outputs = tf.placeholder(tf.int64)#(tf.float32)  # target
+    outputs = tf.placeholder(tf.int64)  # (tf.float32)  # target
     training = tf.placeholder(tf.bool)  # training or evaluation
 
     # Not quite sure what is this for
@@ -66,7 +66,6 @@ def main(data_path, results_file, config):
     embeddings_weights = tf.get_variable("embeddings",
                                          (vocab_size, embeddings_size),
                                          trainable=False)
-                                         # initializer=tf.random_normal_initializer())
 
     place = tf.placeholder(tf.float32, shape=(vocab_size, embeddings_size))
     set_embeddings_weights = embeddings_weights.assign(place)
@@ -92,9 +91,6 @@ def main(data_path, results_file, config):
     def batch_normalization(batch, output_name="bn"):
         dim = len(batch.get_shape().as_list())
         mean, var = tf.nn.moments(batch, axes=list(range(0, dim - 1)))
-        # if mean is None or var is None:
-        #     dim = len(batch.get_shape().as_list())
-        #     mean, var = tf.nn.moments(batch, axes=list(range(0, dim - 1)))
         z = (batch - mean) / tf.sqrt(var + tf.constant(1e-10))
         return tf.identity(z, name=output_name)
 
@@ -102,9 +98,6 @@ def main(data_path, results_file, config):
     # Encoder
     ####################################################################################
     def encoder_layer(z_pre, noise_std, activation=None):
-        # Run the layer
-        # z_pre = run_layer(h, layer_spec, output_name="z_pre")
-
         # Compute mean and variance of z_pre (to be used in the decoder)
         dim = len(z_pre.get_shape().as_list())
         mean, var = tf.nn.moments(z_pre, axes=list(range(0, dim - 1)))
@@ -121,11 +114,10 @@ def main(data_path, results_file, config):
                                initializer=tf.constant_initializer(0))
         gamma = tf.get_variable("gamma", [size],
                                 initializer=tf.constant_initializer(1))
-        if activation == None: # output layer (the softmax activation is computed with the loss together.)
+        if activation == None:  # output layer (the softmax activation is computed with the loss together.)
             h = gamma * (z + beta)
         else:
-            h = activation(gamma * (z + beta)) # try removing gamma variable in this case.
-
+            h = activation(gamma * (z + beta))  # try removing gamma variable in this case.
 
         return tf.identity(h, name="h")
 
@@ -134,25 +126,24 @@ def main(data_path, results_file, config):
         h += tf.random_normal(tf.shape(h)) * noise_std
         h = tf.identity(h, "h0")
 
-        conv_features = []
         weight_variables = []
 
         print('Building conv layers...')
 
         for i in range(conv_layers):
-            ksize = 2 # TODO: kernel size configurable
+            ksize = 2  # TODO: kernel size configurable
             with tf.variable_scope("encoder_bloc_" + str(i), reuse=tf.AUTO_REUSE):
 
                 print('conv layer:', i)
-                if i == 0: # first conv layer
+                if i == 0:  # first conv layer
                     W = tf.get_variable("W",
-                                        (ksize, 1, embeddings_size, conv_filters),
+                                        (1, ksize, embeddings_size, conv_filters),
                                         initializer=tf.truncated_normal_initializer())
                     weight_variables.append(W)
 
-                else: # other conv layer
+                else:  # other conv layer
                     W = tf.get_variable("W",
-                                        (ksize, 1, conv_filters, conv_filters),
+                                        (1, ksize, conv_filters, conv_filters),
                                         initializer=tf.truncated_normal_initializer())
                     weight_variables.append(W)
 
@@ -163,16 +154,12 @@ def main(data_path, results_file, config):
                                      padding="SAME", name="z_pre")
 
                 h = encoder_layer(z_pre, noise_std, activation=tf.nn.relu)
-                conv_features.append(h)
 
         # Build the features to classes layer ("last" layer)
-        total_kernels = len(conv_kernels) # a priori seria un solo kernel size = 2.
-        total_conv_features = total_kernels * conv_filters
         with tf.variable_scope("encoder_bloc_" + str(conv_layers), reuse=tf.AUTO_REUSE):
-
             print('Building output layer...')
 
-            W = tf.get_variable("W", (total_conv_features, num_classes),
+            W = tf.get_variable("W", (conv_filters, num_classes),
                                 initializer=tf.random_normal_initializer())
             weight_variables.append(W)
 
@@ -188,20 +175,12 @@ def main(data_path, results_file, config):
             print('-------------- last_layer shape', last_layer.shape)
 
             logits = encoder_layer(last_layer, noise_std,
-                                   activation=None) # softmax activation is computed together with the loss.
+                                   activation=None)  # softmax activation is computed together with the loss.
             print('-------------- logits shape:', h.get_shape().as_list())
 
-            
-            h = tf.reshape(logits, [-1, max_seq_len, num_classes]) #TOCHECK
-            # h = tf.reshape(logits, [-1, max_seq_len])
+            h = tf.reshape(logits, [-1, max_seq_len, num_classes])
 
-            
             print('-------------- y shape', h.shape)
-            # h = tf.squeeze(h, axis=1)
-            # print('h shape', h.shape) 
-            # print('W shape', W.shape)
-            # z_pre = tf.matmul(h, W, name="z_pre")
-            # h = encoder_layer(z_pre, noise_std, activation=tf.nn.softmax)
         y = tf.identity(h, name="y")
         return y, weight_variables, logits
 
@@ -209,14 +188,14 @@ def main(data_path, results_file, config):
 
     with tf.name_scope("FF_clean"):
         # output of the clean encoder. Used for prediction
-        FF_y, weight_variables, _ = encoder(FFI_embeddings, 0)
+        FF_y, weight_variables, FF_y_logits = encoder(FFI_embeddings, 0)
     with tf.name_scope("FF_corrupted"):
         # output of the corrupted encoder. Used for training.
         FF_y_corr, _, _ = encoder(FFI_embeddings, noise_std)
 
     with tf.name_scope("AE_clean"):
         # corrupted encoding of unlabeled instances
-        AE_y, _, _ = encoder(AEI_embeddings, 0)    
+        AE_y, _, _ = encoder(AEI_embeddings, 0)
     with tf.name_scope("AE_corrupted"):
         # corrupted encoding of unlabeled instances
         AE_y_corr, _, AE_logits_corr = encoder(AEI_embeddings, noise_std)
@@ -265,8 +244,6 @@ def main(data_path, results_file, config):
     u = batch_normalization(AE_logits_corr, output_name="u_L")
 
     # Build first decoder layer (corresponding to the output layer)
-    total_kernels = len(conv_kernels)
-    total_conv_features = total_kernels * conv_filters
     with tf.variable_scope("decoder_bloc_" + str(conv_layers), reuse=tf.AUTO_REUSE):
         z_corr = get_tensor("AE_corrupted", conv_layers, "z")
         z = get_tensor("AE_clean", conv_layers, "z")
@@ -283,11 +260,8 @@ def main(data_path, results_file, config):
         z_est_BN = (z_est - mean) / tf.sqrt(var + tf.constant(1e-10))
         z_est_BN = tf.identity(z_est_BN, name="z_est_BN")
 
-        V = tf.get_variable("V", (num_classes, total_conv_features),
+        V = tf.get_variable("V", (num_classes, conv_filters),
                             initializer=tf.random_normal_initializer())
-
-        print('-------------- z_est shape', z_est.shape)
-        print('-------------- V shape', V.shape)
 
         l2_reg += tf.nn.l2_loss(V)
         u = tf.matmul(z_est, V)
@@ -302,7 +276,7 @@ def main(data_path, results_file, config):
         d_cost.append((tf.reduce_mean(tf.square(z_est_BN - z))) * denoising_cost[-1])
 
     deconv_layers = []
-    
+
     for i in range(conv_layers - 1, -1, -1):
         ksize = 2
         with tf.variable_scope("decoder_bloc_" + str(i), reuse=tf.AUTO_REUSE):
@@ -324,28 +298,22 @@ def main(data_path, results_file, config):
             # run deconvolutional (transposed convolution) layer
             if (i == 0):
                 V = tf.get_variable("V",
-                                    (ksize, 1, embeddings_size, conv_filters),
+                                    (1, ksize, conv_filters, embeddings_size),
                                     initializer=tf.truncated_normal_initializer())
 
                 print('-------------- z_est shape', z_est.shape)
                 print('-------------- V shape', V.shape)
                 print('AEI_embeddings shape', AEI_embeddings.shape)
 
-                u = tf.nn.conv2d_transpose(z_est, V,
-                           output_shape=tf.shape(AEI_embeddings),
-                           strides=[1, 1, 1, 1], padding='SAME')
+                u = tf.nn.conv2d(z_est, V, strides=[1, 1, 1, 1], padding='SAME')
             else:
 
                 V = tf.get_variable("V",
-                                    (ksize, 1, conv_filters, conv_filters),
+                                    (1, ksize, conv_filters, conv_filters),
                                     initializer=tf.truncated_normal_initializer())
                 print('-------------- z_est shape', z_est.shape)
                 print('-------------- V shape', V.shape)
-                u = tf.nn.conv2d_transpose(z_est, V,
-                           # output_shape=tf.shape(AEI_embeddings),
-                           output_shape=tf.shape(z_corr), # TODO: check this
-                           strides=[1, 1, 1, 1], padding='SAME')
-
+                u = tf.nn.conv2d(z_est, V, strides=[1, 1, 1, 1], padding='SAME')
 
             l2_reg += tf.nn.l2_loss(V)
 
@@ -358,8 +326,6 @@ def main(data_path, results_file, config):
         z_corr = tf.get_default_graph().get_tensor_by_name("AE_corrupted/h0:0")
         z = tf.get_default_graph().get_tensor_by_name("AE_clean/h0:0")
         mean, var = tf.constant(0.0), tf.constant(1.0)
-
-        # u, z_est_BN = decoder_bloc(u, z_corr, mean, var)
 
         print('-------------- z_corr shape', z_corr.shape)
         print('-------------- u shape', u.shape)
@@ -376,19 +342,16 @@ def main(data_path, results_file, config):
 
     u_cost = tf.add_n(d_cost)  # reconstruction cost
 
-    # corr_pred_cost = -tf.reduce_mean(tf.reduce_sum(outputs * tf.log(FF_y_corr), 1))  # supervised cost
-    # clean_pred_cost = -tf.reduce_mean(tf.reduce_sum(outputs * tf.log(FF_y), 1))
     corr_pred_cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=outputs, logits=FF_y_corr))
     clean_pred_cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=outputs, logits=FF_y))
 
-    loss = corr_pred_cost + u_cost + config.get("lambda", 0.0) * l2_reg  # total cost
+    loss = corr_pred_cost + u_cost * config['u_cost_weight'] + config.get("lambda", 0.0) * l2_reg  # total cost
 
-    predictions = tf.argmax(FF_y, 2) #TOCHECK
-    # predictions = FF_y
+    predictions = tf.argmax(FF_y, 2)
+
     print('predictions shape', predictions.shape)
     print('outputs shape', outputs.shape)
-    # correct_prediction = tf.equal(predictions, tf.argmax(outputs, 1)) TOCHECK
-    correct_prediction = tf.equal(predictions, outputs)#tf.cast(outputs, "float"))
+    correct_prediction = tf.equal(predictions, outputs)
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
 
     # Optimization setting
@@ -409,18 +372,18 @@ def main(data_path, results_file, config):
     ####################################################################################
     print("===  Loading Data ===", file=sys.stderr)
     data, w2v_model = input_data_seq_tag_cnn_depth_ladder.read_data_sets(data_path,
-                                                        n_classes=config['num_classes'],
-                                                        n_labeled=config['num_labeled'],
-                                                        maxlen=max_seq_len)
+                                                                         n_classes=config['num_classes'],
+                                                                         n_labeled=config['num_labeled'],
+                                                                         maxlen=max_seq_len)
     num_examples = data.train.unlabeled_ds.instances.shape[0]
 
     batch_size = config['batch_size']
     num_epochs = config['num_epochs']
-    exp_name = '_'.join([config['experiment_id'], 
+    exp_name = '_'.join([config['experiment_id'],
                          'conv_layers', str(config['conv_layers']),
                          'conv_filters', str(config['conv_filters']),
                          'conv_kernels', str(config['conv_kernels']),
-                         'lambda', str(config['lambda'])])
+                         'u_cost_weight', str(config['u_cost_weight'])])
 
     num_iter = (num_examples // batch_size) * num_epochs  # number of loop iterations
 
@@ -429,7 +392,7 @@ def main(data_path, results_file, config):
     # Don't pre-allocate memory; allocate as-needed
     dev_config.gpu_options.allow_growth = True
     # Only allow a total of half the GPU memory to be allocated
-    dev_config.gpu_options.per_process_gpu_memory_fraction = 1#0.5
+    dev_config.gpu_options.per_process_gpu_memory_fraction = 1  # 0.5
     sess = tf.Session(config=dev_config)
 
     if not os.path.exists(results_file):
@@ -443,7 +406,7 @@ def main(data_path, results_file, config):
     sess.run(init)
 
     print('=== Initializing embeddings with pre-trained weights ===')
-    sess.run(set_embeddings_weights, feed_dict={place: w2v_model.syn0})  #.vectors})
+    sess.run(set_embeddings_weights, feed_dict={place: w2v_model.vectors})
 
     print("=== Training Start ===", file=sys.stderr)
     tr = trange(0, num_iter, desc="iter: nan - loss: nan")
@@ -492,7 +455,7 @@ def main(data_path, results_file, config):
                            epoch_stats[2],
                            np.array2string(true_labels[i]),
                            np.array2string(epoch_stats[3][i])),
-                           file=results_log)
+                          file=results_log)
 
             tqdm.write("Epoch %d: Accuracy for Training Data: %.3g" %
                        (epoch_n, np.mean(mean_accuracy)), file=sys.stderr)
@@ -517,7 +480,6 @@ def main(data_path, results_file, config):
                 mean_accuracy.append(epoch_stats[0])
                 mean_loss.append(epoch_stats[2])
 
-                
                 true_labels = validation_labels[start:end]
                 for i in np.arange(true_labels.shape[0]):
                     print("%s,validation,%d,%.3g,%.3g,%.3g,%s,%s" %
@@ -528,7 +490,7 @@ def main(data_path, results_file, config):
                            epoch_stats[2],
                            np.array2string(true_labels[i]),
                            np.array2string(epoch_stats[3][i])),
-                           file=results_log)
+                          file=results_log)
 
             tqdm.write("Epoch %d: Accuracy for Validation Data: %.3g" %
                        (epoch_n, np.mean(mean_accuracy)), file=sys.stderr)
@@ -576,7 +538,7 @@ def main(data_path, results_file, config):
                    final_stats[2],
                    np.array2string(true_labels[i]),
                    np.array2string(final_stats[3][i])),
-                   file=results_log)
+                  file=results_log)
 
     print("Final Accuracy for Training Data: %.3g" % np.mean(mean_accuracy), file=sys.stderr)
     print("Final Supervised Cost for Training Data: %.3g" % np.mean(mean_loss), file=sys.stderr)
@@ -609,7 +571,7 @@ def main(data_path, results_file, config):
                    final_stats[2],
                    np.array2string(true_labels[i]),
                    np.array2string(final_stats[3][i])),
-                   file=results_log)
+                  file=results_log)
 
     print("Final Accuracy for Validation Data: %.3g" % np.mean(mean_accuracy), file=sys.stderr)
     print("Final Supervised Cost for Validation Data: %.3g" % np.mean(mean_loss), file=sys.stderr)
@@ -638,7 +600,7 @@ def main(data_path, results_file, config):
                    final_stats[2],
                    np.array2string(true_labels[i]),
                    np.array2string(final_stats[3][i])),
-                   file=results_log)
+                  file=results_log)
 
     print("=== Experiment finished ===", file=sys.stderr)
     sess.close()
