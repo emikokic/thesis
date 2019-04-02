@@ -297,7 +297,7 @@ print ("Initial Accuracy: ", sess.run(accuracy, feed_dict={inputs: winer.validat
 
 train_loss_labeled = []
 train_loss_unlabeled = []
-# train_acc_list = []
+train_acc_list = []
 val_acc_list = []
 
 for i in tqdm(range(int(i_iter), int(num_iter))):
@@ -319,13 +319,15 @@ for i in tqdm(range(int(i_iter), int(num_iter))):
             sess.run(learning_rate.assign(starter_learning_rate * ratio))
         
         # saver.save(sess, 'checkpoints/model.ckpt', global_step=epoch_n)
+        train_acc = sess.run(accuracy, feed_dict={inputs: words, outputs: labels, training: True})
         val_acc = sess.run(accuracy, feed_dict={inputs: winer.validation.words, outputs:winer.validation.labels, training: False})
         
         print ("Epoch ", epoch_n, ", Training Labeled loss: {0:.6f}".format(train_l_loss))
         print ("Epoch ", epoch_n, ", Training Unlabeled loss: {0:.6f}".format(train_u_loss))
+        print ("Epoch ", epoch_n, ", Training Accuracy: ", train_acc, "%")
         print ("Epoch ", epoch_n, ", Validation Accuracy: ", val_acc, "%")
         
-        # train_acc_list.append(train_acc)
+        #train_acc_list.append(train_acc)
         val_acc_list.append(val_acc)
 # saver.save(sess, './models/median_decay-300-100-100-5')
 val_acc = sess.run(accuracy, feed_dict={inputs: winer.validation.words, outputs: winer.validation.labels, training: False})
@@ -344,14 +346,14 @@ print('Saving training loss and validation accuracy...')
 # with open('~/thesis/models/ladder_train_u_loss.txt', 'w') as filehandle:  
 #     filehandle.writelines("%s\n" % loss for loss in train_loss_unlabeled)
 
-if not os.path.exists('/home/ekokic/thesis/models/ladder_metrics.csv'):
-    with open('/home/ekokic/thesis/models/ladder_metrics.csv', 'w', newline='') as csvfile:
+if not os.path.exists('/home/ekokic/thesis/models/experiments/ladder_MLP/ladder_metrics.csv'):
+    with open('/home/ekokic/thesis/models/experiments/ladder_MLP/ladder_metrics.csv', 'w', newline='') as csvfile:
         metric_writer = csv.writer(csvfile, delimiter=',')
-        metric_writer.writerow(['model_name', 'train_loss_labeled', 'train_loss_unlabeled', 'val_acc'])
+        metric_writer.writerow(['model_name', 'train_loss_labeled', 'train_loss_unlabeled', 'train_acc', 'val_acc'])
 
-with open('/home/ekokic/thesis/models/ladder_metrics.csv', 'a', newline='') as csvfile:
+with open('/home/ekokic/thesis/models/experiments/ladder_MLP/ladder_metrics.csv', 'a', newline='') as csvfile:
     metric_writer = csv.writer(csvfile, delimiter=',')
-    metric_writer.writerow([experiment_name, train_loss_labeled, train_loss_unlabeled, val_acc])
+    metric_writer.writerow([experiment_name, train_loss_labeled, train_loss_unlabeled, train_acc_list, val_acc_list])
 
 
 # print('Saving model metrics...')

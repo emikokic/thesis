@@ -349,7 +349,7 @@ def main(data_path, results_file, config):
     corr_pred_cost = -tf.reduce_mean(tf.reduce_sum(outputs * tf.log(FF_y_corr), 1))  # supervised cost
     clean_pred_cost = -tf.reduce_mean(tf.reduce_sum(outputs * tf.log(FF_y), 1))
 
-    loss = corr_pred_cost + u_cost + config.get("lambda", 0.0) * l2_reg  # total cost
+    loss = corr_pred_cost + u_cost * config['u_cost_weight'] + config.get("lambda", 0.0) * l2_reg  # total cost
 
     predictions = tf.argmax(FF_y, 1)
     correct_prediction = tf.equal(predictions, tf.argmax(outputs, 1))

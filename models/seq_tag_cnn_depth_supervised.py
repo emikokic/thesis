@@ -179,21 +179,15 @@ if __name__ == '__main__':
 
     print('Training model...')
     args = list(vars(args).items())
-    experiment_name = 'seq_tag_cnn_depth_supervised_preds'
+    out_dir = '/home/ekokic/thesis/models/experiments/cnn_depth_supervised'
+    experiment_name = 'cnn_depth_supervised'
     for key, value in args:
         experiment_name += ('_' + str(key) + '_' + str(value))
-    if not os.path.exists('experiments' + '/' + experiment_name):
-        os.makedirs('experiments' + '/' + experiment_name)
+    if not os.path.exists(out_dir + '/' + experiment_name):
+        os.makedirs(out_dir + '/' + experiment_name)
 
     callbacks = [
-        # ModelCheckpoint(filepath=os.path.join('experiments', experiment_name,
-        #                                       'weights.{epoch:02d}-{val_loss:.2f}.hdf5'),
-        #                 monitor='val_acc',
-        #                 verbose=1,
-        #                 save_best_only=True,
-        #                 save_weights_only=False,
-        #                 mode='auto'),
-        CSVLogger(filename=os.path.join('experiments', experiment_name, 'train_logs.csv'),
+        CSVLogger(filename=os.path.join(out_dir, experiment_name, 'train_logs.csv'),
                   separator=',',
                   append=False)
     ]
@@ -205,15 +199,4 @@ if __name__ == '__main__':
                         callbacks=callbacks)
 
     print('Saving model...')
-    model.save(os.path.join('experiments', experiment_name, 'model'))
-
-    # print('Saving model predictions...')
-    # predictions = model.predict(X_train)
-    # np.savez_compressed(os.path.join('experiments', experiment_name, 'pred_labels_train'), predictions)
-    # np.savez_compressed(os.path.join('experiments', experiment_name, 'true_labels_train'), y_train)
-    # predictions = model.predict(X_val)
-    # np.savez_compressed(os.path.join('experiments', experiment_name, 'pred_labels_val'), predictions)
-    # np.savez_compressed(os.path.join('experiments', experiment_name, 'true_labels_val'), y_val)
-    # predictions = model.predict(X_test)
-    # np.savez_compressed(os.path.join('experiments', experiment_name, 'pred_labels_test'), predictions)
-    # np.savez_compressed(os.path.join('experiments', experiment_name, 'true_labels_test'), y_test)
+    model.save(os.path.join(out_dir, experiment_name, 'cnn_depth_supervised_model'))

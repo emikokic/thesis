@@ -183,21 +183,15 @@ if __name__ == '__main__':
 
     print('Training model...')
     args = list(vars(args).items())
+    out_dir = '/home/ekokic/thesis/models/experiments/cnn_wide_supervised'
     experiment_name = 'cnn_wide_supervised'
     for key, value in args:
         experiment_name += ('_' + str(key) + '_' + str(value))
-    if not os.path.exists('experiments' + '/' + experiment_name):
-        os.makedirs('experiments' + '/' + experiment_name)
+    if not os.path.exists(out_dir + '/' + experiment_name):
+        os.makedirs(out_dir + '/' + experiment_name)
 
     callbacks = [
-        ModelCheckpoint(filepath=os.path.join('experiments', experiment_name,
-                                              'weights.{epoch:02d}-{val_loss:.2f}.hdf5'),
-                        monitor='val_acc',
-                        verbose=1,
-                        save_best_only=True,
-                        save_weights_only=False,
-                        mode='auto'),
-        CSVLogger(filename=os.path.join('experiments', experiment_name, 'train_logs.csv'),
+        CSVLogger(filename=os.path.join(out_dir, experiment_name, 'train_logs.csv'),
                   separator=',',
                   append=False)
     ]
@@ -207,50 +201,4 @@ if __name__ == '__main__':
                         verbose=1,
                         validation_data=(X_dev, y_dev),
                         callbacks=callbacks)
-
-    # print('Saving model metrics...')
-    # train_loss = np.array(history.history['loss'])
-    # dev_loss = np.array(history.history['val_loss'])
-    # train_acc = np.array(history.history['acc'])
-    # dev_acc = np.array(history.history['val_acc'])
-
-    # if not path.exists('/home/ekokic/thesis/models/experiments/cnn_wide_metrics.csv'):
-    #     with open('/home/ekokic/thesis/models/experiments/cnn_wide_metrics.csv', 'w', newline='') as csvfile:
-    #         metric_writer = csv.writer(csvfile, delimiter=',')
-    #         metric_writer.writerow(['model_name', 'train_loss', 'dev_loss', 'train_acc', 'dev_acc'])
-
-    # with open('/home/ekokic/thesis/models/experiments/cnn_wide_metrics.csv', 'a', newline='') as csvfile:
-    #     metric_writer = csv.writer(csvfile, delimiter=',')
-    #     metric_writer.writerow([experiment_name, train_loss, dev_loss, train_acc, dev_acc])
-
-    # history_df = pd.DataFrame({'train_loss': train_loss, 'dev_loss': dev_loss,
-    #                            'train_acc': train_acc, 'val_acc': val_acc})
-    # history_df.to_csv('./thesis/models/history/model_{}.h5'.format(experiment_name))
-
-    # np.savetxt('./thesis/models/losses/model_{}.h5'.format(experiment_name), loss_history, delimiter=",")
-    # np.savetxt('./thesis/models/accs/model_{}.h5'.format(experiment_name), acc_history, delimiter=",")
-
-# TODO 4: Evaluate the model, calculating the metrics.
-# Option 1: Use the model.evaluate() method. For this, the model must be
-# already compiled with the metrics.
-# performance = model.evaluate(transform_input(X_test), y_test)
-
-# Option 2: Use the model.predict() method and calculate the metrics using
-# sklearn. We recommend this, because you can store the predictions if
-# you need more analysis later. Also, if you calculate the metrics on a
-# notebook, then you can compare multiple classifiers.
-# predictions = ...
-# performance = ...
-
-# TODO 5: Save the results.
-# ...
-
-# One way to store the predictions:
-# results = pandas.DataFrame(y_test_orginal, columns=['true_label'])
-# results.loc[:, 'predicted'] = predictions
-# results.to_csv('predictions_{}.csv'.format(args.experiment_name),
-#                index=False)
-
-    # print('Saving model...')
-    # model.save_weights('./thesis/models/weights/{}.h5'.format(experiment_name))
-    # model.save('~/thesis/models/saved/{}.h5'.format(experiment_name))
+    model.save(os.path.join(out_dir, experiment_name, 'cnn_wide_supervised_model'))
